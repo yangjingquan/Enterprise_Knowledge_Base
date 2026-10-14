@@ -67,7 +67,7 @@ def _patch(monkeypatch, vec_ids, rerank_scores=None, enabled=True):
 
 def test_hybrid_keeps_bm25_hit_when_vector_weak(monkeypatch):
     # 向量检索把 E-03 排在后面且相似度低于阈值，BM25 把它救回来
-    _patch(monkeypatch, [("1_1", 0.62), ("1_0", 0.41)])
+    _patch(monkeypatch, [("1_1", 0.62), ("1_0", 0.31)])
     res = retrieval.retrieve("E-03怎么处理", 4, mode="hybrid")
     ids = [f"{d.metadata['document_id']}_{d.metadata['chunk_index']}" for d, _, _ in res]
     assert ids[0] == "1_0"

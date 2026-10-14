@@ -1,0 +1,69 @@
+/* ===== 设计令牌（Design Tokens）=====
+   品牌色：靛蓝 #4f46e5；圆角 8/12/16；8px 间距体系；柔和阴影 */
+:root {
+  --brand: #4f46e5;
+  --brand-2: #7c3aed;
+  --brand-soft: #eef2ff;
+  --bg: #f5f6fa;
+  --surface: #ffffff;
+  --text-1: #1f2937;
+  --text-2: #4b5563;
+  --text-3: #9ca3af;
+  --border: #e8eaf0;
+  --radius-sm: 8px;
+  --radius: 12px;
+  --radius-lg: 16px;
+  --shadow-sm: 0 1px 2px rgba(16, 24, 40, .05);
+  --shadow: 0 4px 16px rgba(16, 24, 40, .06);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, .12);
+  --sider: #0f172a;
+
+  /* 覆盖 Element Plus 主题变量 */
+  --el-color-primary: #4f46e5;
+  --el-color-primary-light-3: #8480ee;
+  --el-color-primary-light-5: #a7a3f2;
+  --el-color-primary-light-7: #cac8f7;
+  --el-color-primary-light-8: #dcdafa;
+  --el-color-primary-light-9: #edecfc;
+  --el-color-primary-dark-2: #3f38b7;
+  --el-border-radius-base: 8px;
+  --el-border-color-lighter: #eef0f4;
+  --el-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+}
+html, body, #app { margin: 0; height: 100%; background: var(--bg); color: var(--text-1); font-family: var(--el-font-family); -webkit-font-smoothing: antialiased; }
+* { box-sizing: border-box; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: #d4d7de; border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* 通用卡片 / 页面块 */
+.panel { background: var(--surface); border-radius: var(--radius); box-shadow: var(--shadow-sm); border: 1px solid var(--border); }
+.panel-pad { padding: 20px 24px; }
+.toolbar-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.muted { color: var(--text-3); }
+.el-card { border-radius: var(--radius) !important; border-color: var(--border) !important; }
+.el-button { font-weight: 500; }
+.el-dialog { border-radius: var(--radius-lg) !important; }
+.el-dialog__header { font-weight: 600; }
+
+/* 表格：表头浅底、行高舒展 */
+.el-table { --el-table-header-bg-color: #f8f9fc; --el-table-row-hover-bg-color: #f6f7ff; border-radius: var(--radius-sm); }
+.el-table th.el-table__cell { color: var(--text-2); font-weight: 600; }
+.el-table .cell { line-height: 22px; }
+
+/* Markdown 内容 */
+.markdown { line-height: 1.75; font-size: 14.5px; color: var(--text-1); word-break: break-word; }
+.markdown > :first-child { margin-top: 0; }
+.markdown > :last-child { margin-bottom: 0; }
+.markdown p { margin: 6px 0; }
+.markdown ul, .markdown ol { padding-left: 22px; margin: 6px 0; }
+.markdown table { border-collapse: collapse; margin: 10px 0; font-size: 13px; display: block; overflow-x: auto; }
+.markdown th, .markdown td { border: 1px solid var(--border); padding: 6px 12px; }
+.markdown th { background: #f8f9fc; font-weight: 600; }
+.markdown blockquote { margin: 8px 0; padding: 4px 12px; border-left: 3px solid var(--brand); background: var(--brand-soft); color: var(--text-2); border-radius: 0 6px 6px 0; }
+.markdown code:not(.hljs) { background: #f1f2f6; padding: 1px 6px; border-radius: 4px; font-size: 13px; color: #c026d3; }
+.markdown pre.code { background: #f8f9fc; border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 0; overflow: hidden; margin: 10px 0; }
+.markdown pre.code .code-lang { font-size: 12px; color: var(--text-3); padding: 6px 12px; border-bottom: 1px solid var(--border); background: #f1f3f8; }
+.markdown pre.code code.hljs { display: block; padding: 12px; overflow-x: auto; background: transparent; font-size: 13px; line-height: 1.6; font-family: "JetBrains Mono", Menlo, Consolas, monospace; }
+.markdown h1, .markdown h2, .markdown h3 { margin: 14px 0 8px; line-height: 1.4; }
+.markdown h1 { font-size: 20px; } .markdown h2 { font-size: 18px; } .markdown h3 { font-size: 16px; }

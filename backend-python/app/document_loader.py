@@ -62,6 +62,8 @@ def _cell_str(v):
 OCR_MIN_CHARS = int(os.getenv("OCR_MIN_CHARS", "20"))
 # 渲染分辨率：200 DPI 在识别率和速度之间比较均衡
 OCR_DPI = int(os.getenv("OCR_DPI", "200"))
+# 渲染后图片最长边上限（像素）：控制 OCR 峰值内存，A4 200DPI 约 2339，缩到 2000 识别结果不变
+OCR_MAX_SIDE = int(os.getenv("OCR_MAX_SIDE", "2000"))
 # 是否启用 OCR
 OCR_ENABLED = os.getenv("OCR_ENABLED", "true").lower() in ("1", "true", "yes")
 
@@ -84,6 +86,8 @@ def _ocr_page(page) -> str:
     """
     import numpy as np
     img = page.to_image(resolution=OCR_DPI).original.convert("RGB")
+    if max(img.size) > OCR_MAX_SIDE:
+        img.thumbnail((OCR_MAX_SIDE, OCR_MAX_SIDE))
     result, _ = _ocr_engine()(np.array(img))
     if not result:
         return ""

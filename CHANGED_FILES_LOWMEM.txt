@@ -1,0 +1,19 @@
+# v0.4 低内存模式（阿里云百炼云端向量 / 重排）改动文件
+新增 backend-python/app/embeddings.py          向量模型提供方（dashscope / local）、分批 10 条、超时、指数退避重试、按模型命名集合
+新增 backend-python/app/reindex.py             重建索引（旧集合 → 新集合，断点续跑），python -m app.reindex
+新增 backend-python/requirements-local.txt     本地模型依赖（torch / sentence-transformers），仅 WITH_LOCAL_MODELS=true 安装
+新增 backend-python/tools/mock_dashscope.py    本地模拟百炼接口（测试用）
+新增 backend-python/tests/test_dashscope.py    云端向量 / 重排 / 重建索引单元测试
+新增 docs/eval-report-dashscope.md             百炼方案评测报告
+修改 backend-python/app/vectorstore.py         改用 embeddings.get_embeddings()，集合名随模型变化
+修改 backend-python/app/reranker.py            RERANK_PROVIDER=dashscope|local|none，新增 gte-rerank-v2
+修改 backend-python/app/retrieval.py           重排失败自动退回混合检索；云端向量阈值默认 0.4
+修改 backend-python/app/main.py                启动不再依赖模型 / key；新增 /admin/reindex；/stats 显示提供方
+修改 backend-python/app/document_loader.py     OCR 图片最长边限制 2000px（OCR_MAX_SIDE），降低峰值内存
+修改 backend-python/requirements.txt           移除 sentence-transformers / langchain-huggingface
+修改 backend-python/Dockerfile                 构建参数 WITH_LOCAL_MODELS（默认 false，不装 torch）
+修改 backend-python/tests/test_retrieval.py    适配新的默认阈值
+修改 docker-compose.yml                        mem_limit、Java 堆 256m、MySQL 低内存参数、新环境变量
+修改 .env.example                              百炼相关配置
+修改 README.md                                 4GB 服务器部署章节
+新增 CHANGED_FILES_LOWMEM.txt

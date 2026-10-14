@@ -1,2 +1,7 @@
-<template><router-view /></template>
-<style>html,body,#app{margin:0;height:100%;font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;background:#f5f7fa}</style>
+<template>
+  <!-- 全局中文语言包 -->
+  <el-config-provider :locale="zhCn"><router-view /></el-config-provider>
+</template>
+<script setup>
+import zhCn from 'element-plus/es/locale/lang/zh-cn'
+</script>

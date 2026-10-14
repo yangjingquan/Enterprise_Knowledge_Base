@@ -11,6 +11,7 @@ Java 后端负责用户、文档记录和问答历史；本服务只负责 AI �
   - /parse        只解析切分、不入库（调试用）
 """
 import json
+import logging
 import threading
 
 from fastapi import FastAPI, HTTPException
@@ -18,10 +19,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
-from . import bm25, rag, reranker, retrieval, vectorstore, web_fetch
+from . import bm25, embeddings, rag, reindex, reranker, retrieval, vectorstore, web_fetch
 from .document_loader import split_document
 
 app = FastAPI(title="KB RAG Service")
+log = logging.getLogger("uvicorn.error")
 
 # 允许跨域（本服务只在 Docker 内网被 Java 调用，这里放开便于本地调试）
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -68,13 +70,18 @@ class FetchUrlReq(BaseModel):
 def warmup():
     """
     服务启动时：
-      1. 做一次检索，提前把 bge-m3 模型加载进内存，避免第一个问题等很久；
+      1. 本地模型模式：做一次检索，提前把 bge-m3 加载进内存（云端模式跳过，不依赖网络和 key）；
       2. BM25 索引与 Chroma 对账（缓存中没有的块重新分词）；
-      3. 预热重排序模型（启用时）。
+      3. 预热本地重排序模型（启用时）。
     """
-    vectorstore.get_store().similarity_search("预热", k=1)
+    if embeddings.EMBEDDING_PROVIDER == "local":
+        vectorstore.get_store().similarity_search("预热", k=1)
     vectorstore.sync_bm25()
     reranker.warmup()
+    n = vectorstore.get_store()._collection.count()
+    if n == 0 and reindex.pick_source(reindex._client(), vectorstore.COLLECTION):
+        log.warning("当前向量集合 %s 为空，但存在旧集合：请运行 python -m app.reindex 或 POST /admin/reindex",
+                    vectorstore.COLLECTION)
 
 
 @app.get("/health")
@@ -183,10 +190,42 @@ def stats():
         "chunks_bm25": len(bm25.index),
         "chunks_vector": vectorstore.get_store()._collection.count(),
         "retrieval_mode": retrieval.DEFAULT_MODE,
+        "embedding_provider": embeddings.EMBEDDING_PROVIDER,
+        "embedding_model": (embeddings.DASHSCOPE_EMBEDDING_MODEL if embeddings.EMBEDDING_PROVIDER == "dashscope"
+                            else embeddings.EMBEDDING_MODEL),
+        "collection": vectorstore.COLLECTION,
+        "rerank_provider": reranker.RERANK_PROVIDER,
         "rerank_enabled": reranker.enabled(),
         "rerank_model": reranker.RERANK_MODEL,
         "rerank_threshold": retrieval.RERANK_THRESHOLD,
     }
+
+
+class ReindexReq(BaseModel):
+    """重建索引请求"""
+    source: str | None = None   # 源集合名，默认自动选择
+    force: bool = False         # 已存在的块也重新计算
+
+
+@app.post("/admin/reindex")
+def admin_reindex(req: ReindexReq):
+    """切换向量模型后，在后台用新模型重算全部文本块的向量；GET /admin/reindex 查看进度。"""
+    if reindex.STATUS["running"]:
+        return {"started": False, "message": "重建索引正在进行中"}
+
+    def job():
+        try:
+            reindex.run(req.source, req.force)
+        except Exception as e:
+            log.error("重建索引失败：%s", e)
+
+    threading.Thread(target=job, daemon=True).start()
+    return {"started": True, "target": vectorstore.COLLECTION}
+
+
+@app.get("/admin/reindex")
+def admin_reindex_status():
+    return reindex.STATUS
 
 
 @app.post("/ask")

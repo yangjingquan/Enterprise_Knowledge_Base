@@ -9,7 +9,12 @@ services:
       MYSQL_USER: kb
       MYSQL_PASSWORD: kb123
       TZ: Asia/Shanghai
-    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    # 低内存配置：缓冲池 128M、关闭 performance_schema，常驻内存约 250~350MB（数据量很小，足够用）
+    command: >
+      --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+      --innodb-buffer-pool-size=128M --performance-schema=OFF
+      --max-connections=50 --innodb-log-buffer-size=8M
+    mem_limit: ${MYSQL_MEM_LIMIT:-512m}
     volumes:
       - mysql_data:/var/lib/mysql
       - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -19,17 +24,28 @@ services:
       retries: 20
 
   backend-python:
-    build: ./backend-python
+    build:
+      context: ./backend-python
+      args:
+        # 默认不装 torch 等本地模型依赖（云端向量/重排）；要用本地 bge-m3 时在 .env 设 WITH_LOCAL_MODELS=true
+        WITH_LOCAL_MODELS: ${WITH_LOCAL_MODELS:-false}
     restart: unless-stopped
+    # 云端模式实测空闲约 130MB、问答约 300MB、扫描件 OCR 峰值约 750MB；改用本地模型时请把 PY_MEM_LIMIT 调到 6g 以上
+    mem_limit: ${PY_MEM_LIMIT:-1g}
     environment:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?请在 .env 中设置 DEEPSEEK_API_KEY}
+      # 向量模型：dashscope（阿里云百炼，默认）/ local（本地 bge-m3）
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-dashscope}
+      DASHSCOPE_API_KEY: ${DASHSCOPE_API_KEY:-}
+      DASHSCOPE_EMBEDDING_MODEL: ${DASHSCOPE_EMBEDDING_MODEL:-text-embedding-v3}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-1024}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
       CHROMA_DIR: /data/chroma_db
       UPLOAD_DIR: /data/uploads   # 网页导入时 HTML 保存到这里（与 Java 共享）
-      # 重排序：默认开启（bge-reranker-v2-m3，首次启动自动下载约 2.2GB，运行时约占 2.3GB 内存）。
-      # 内存不足 6GB 的机器可在 .env 中设置 RERANK_ENABLED=false，自动退回“向量 + BM25”混合检索
-      RERANK_ENABLED: ${RERANK_ENABLED:-true}
+      # 重排序：dashscope（百炼 gte-rerank-v2，默认）/ local（本地 bge-reranker-v2-m3，约 2.3GB 内存）/ none
+      RERANK_PROVIDER: ${RERANK_PROVIDER:-dashscope}
+      DASHSCOPE_RERANK_MODEL: ${DASHSCOPE_RERANK_MODEL:-gte-rerank-v2}
       RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
       RERANK_TOP_N: ${RERANK_TOP_N:-15}
       RERANK_THRESHOLD: ${RERANK_THRESHOLD:-0.15}
@@ -43,13 +59,17 @@ services:
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
-      start_period: 600s   # 首次启动需下载 bge-m3（约 2.2GB）
+      # /health 不依赖模型；云端模式启动只需几秒。本地模型首次启动需下载 bge-m3，所以宽限期保留较长
+      start_period: 600s
       retries: 60
 
   backend-java:
     build: ./backend-java
     restart: unless-stopped
+    mem_limit: ${JAVA_MEM_LIMIT:-512m}
     environment:
+      # 限制堆内存 256MB（演示数据量足够），容器总占用约 350~450MB
+      JAVA_TOOL_OPTIONS: ${JAVA_OPTS:--Xms128m -Xmx256m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k}
       DB_HOST: mysql
       RAG_URL: http://backend-python:8000
       UPLOAD_DIR: /data/uploads
@@ -64,6 +84,7 @@ services:
 
   frontend:
     build: ./frontend
+    mem_limit: 64m
     ports:
       - "5173:80"
     depends_on: [backend-java]

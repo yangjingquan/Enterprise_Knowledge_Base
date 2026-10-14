@@ -52,7 +52,7 @@
               {{ chunkLabel(c) }}
               <el-tag v-if="c.chunk_index === source.chunk_index" size="small" type="warning">引用片段</el-tag>
             </div>
-            <div class="md" v-html="md(c.text)" />
+            <div class="md markdown" v-html="md(c.text)" />
           </div>
         </div>
       </template>
@@ -62,7 +62,7 @@
 
 <script setup>
 import { ref, computed, nextTick } from 'vue'
-import { marked } from 'marked'
+import { md } from '../markdown'
 import * as pdfjsLib from 'pdfjs-dist'
 import workerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import api from '../api'
@@ -90,7 +90,6 @@ let blobUrl = null
 let fileBlob = null
 
 // breaks: true 让单个换行也显示为换行（Excel 每行一条记录）
-const md = t => marked.parse(t || '', { breaks: true })
 const isPdf = computed(() => (doc.value?.fileType || '').toLowerCase() === 'pdf')
 const title = computed(() => `原文查看 · ${source.value.file_name || ''}`)
 const locationText = computed(() => {
@@ -232,15 +231,15 @@ defineExpose({ open })
 
 <style scoped>
 .viewer { min-height: 300px; }
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
-.page-box { max-height: 76vh; overflow: auto; background: #f5f5f5; padding: 10px; display: flex; justify-content: center; }
-.page { position: relative; box-shadow: 0 2px 8px rgba(0, 0, 0, .15); background: #fff; }
+.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; padding: 8px 12px; background: #f8f9fc; border: 1px solid var(--border); border-radius: 10px; font-size: 13px; color: var(--text-2); }
+.toolbar a { color: var(--brand); }
+.page-box { max-height: 74vh; overflow: auto; background: #eef0f5; padding: 16px; display: flex; justify-content: center; border-radius: 10px; }
+.page { position: relative; box-shadow: 0 6px 24px rgba(15, 23, 42, .18); background: #fff; border-radius: 2px; }
 .page canvas { display: block; }
-.hl { position: absolute; background: rgba(255, 213, 0, .38); border-bottom: 2px solid #faad14; pointer-events: none; }
-.context { max-height: 72vh; overflow: auto; }
-.chunk { border: 1px solid #eee; border-radius: 6px; padding: 8px 12px; margin-bottom: 10px; color: #666; }
-.chunk.cited { border-color: #faad14; background: #fffbe6; color: #222; }
-.chunk-meta { font-size: 12px; color: #999; margin-bottom: 4px; display: flex; gap: 8px; align-items: center; }
-.md :deep(table) { border-collapse: collapse; font-size: 12px; }
-.md :deep(td), .md :deep(th) { border: 1px solid #ddd; padding: 3px 6px; }
+.hl { position: absolute; background: rgba(255, 213, 0, .38); border-bottom: 2px solid #faad14; pointer-events: none; mix-blend-mode: multiply; }
+.context { max-height: 72vh; overflow: auto; padding-right: 4px; }
+.chunk { border: 1px solid var(--border); border-radius: 10px; padding: 10px 14px; margin-bottom: 10px; color: var(--text-3); background: #fff; }
+.chunk.cited { border-color: #fbbf24; background: #fffbeb; color: var(--text-1); box-shadow: 0 0 0 3px rgba(251, 191, 36, .15); }
+.chunk-meta { font-size: 12px; color: var(--text-3); margin-bottom: 6px; display: flex; gap: 8px; align-items: center; }
+.md { font-size: 13.5px; }
 </style>

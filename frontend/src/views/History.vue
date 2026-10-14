@@ -3,80 +3,94 @@
   顶部显示反馈统计；展开行可看完整答案、改写后的问题、引用来源和点踩原因。
 -->
 <template>
-  <el-card>
-    <template #header>
-      <div class="hd">
-        <b>问答历史</b>
-        <div class="stats">
-          <span>共 {{ stats.total }} 条</span>
-          <span class="up">👍 有用 {{ stats.up }}</span>
-          <span class="down">👎 没用 {{ stats.down }}</span>
-          <span>未反馈 {{ stats.none }}</span>
-          <span v-if="stats.up + stats.down">满意度 {{ satisfaction }}%</span>
-        </div>
-        <el-radio-group v-model="filter" size="small" @change="load">
+  <div class="page">
+    <PageHeader title="问答历史" icon="Clock" :desc="admin ? '查看全员问答记录与反馈，发现知识库的薄弱环节' : '查看你的问答记录与反馈'">
+      <el-button icon="Refresh" @click="load">刷新</el-button>
+    </PageHeader>
+
+    <div class="stats">
+      <StatCard icon="ChatLineSquare" :value="stats.total" label="问答总数" />
+      <StatCard icon="CircleCheck" :value="stats.up" label="👍 有用" color="#16a34a" bg="#dcfce7" />
+      <StatCard icon="Warning" :value="stats.down" label="👎 没用" color="#dc2626" bg="#fee2e2" />
+      <StatCard icon="TrendCharts" :value="stats.up + stats.down ? satisfaction : '—'" :unit="stats.up + stats.down ? '%' : ''"
+        :label="`满意度（未反馈 ${stats.none} 条）`" color="#7c3aed" bg="#f3e8ff" />
+    </div>
+
+    <div class="panel panel-pad">
+      <div class="toolbar-row filter">
+        <el-input v-model="keyword" placeholder="搜索问题" prefix-icon="Search" clearable class="kw" />
+        <el-radio-group v-model="filter" @change="load">
           <el-radio-button value="">全部</el-radio-button>
           <el-radio-button value="up">有用</el-radio-button>
           <el-radio-button value="down">没用</el-radio-button>
           <el-radio-button value="none">未反馈</el-radio-button>
         </el-radio-group>
       </div>
-    </template>
 
-    <el-table :data="list" v-loading="loading">
-      <el-table-column type="expand">
-        <template #default="{ row }">
-          <div class="detail">
-            <p v-if="row.rewrittenQuestion" class="meta">多轮改写：{{ row.rewrittenQuestion }}</p>
-            <p v-if="row.feedbackComment" class="meta down">点踩原因：{{ row.feedbackComment }}</p>
-            <div v-html="md(row.answer)" />
-            <div v-if="sources(row).length" class="meta">
-              引用：
-              <span v-for="s in sources(row)" :key="s.index">[{{ s.index }}] {{ s.file_name }} {{ loc(s) }}　</span>
+      <el-table :data="shown" v-loading="loading" row-key="id">
+        <el-table-column type="expand">
+          <template #default="{ row }">
+            <div class="detail">
+              <div v-if="row.rewrittenQuestion" class="meta"><el-icon><Connection /></el-icon>多轮改写：{{ row.rewrittenQuestion }}</div>
+              <el-alert v-if="row.feedbackComment" :title="`点踩原因：${row.feedbackComment}`" type="error" :closable="false" show-icon class="reason" />
+              <div class="markdown answer" v-html="md(row.answer)" />
+              <div v-if="sources(row).length" class="refs">
+                <span class="ref-label">引用</span>
+                <el-tag v-for="s in sources(row)" :key="s.index" effect="plain" class="ref">[{{ s.index }}] {{ s.file_name }} · {{ loc(s) }}</el-tag>
+              </div>
             </div>
-          </div>
-        </template>
-      </el-table-column>
-      <el-table-column prop="question" label="问题" min-width="260" />
-      <el-table-column label="反馈" width="90">
-        <template #default="{ row }">
-          <el-tag v-if="row.feedback === 1" type="success" size="small">有用</el-tag>
-          <el-tooltip v-else-if="row.feedback === -1" :content="row.feedbackComment || '未填写原因'">
-            <el-tag type="danger" size="small">没用</el-tag>
-          </el-tooltip>
-          <span v-else class="muted">—</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="会话" width="110">
-        <template #default="{ row }">
-          <el-button v-if="row.sessionId" link size="small" @click="showSession(row.sessionId)">
-            {{ sessionCount(row.sessionId) }} 轮
-          </el-button>
-        </template>
-      </el-table-column>
-      <el-table-column label="来源数" width="80">
-        <template #default="{ row }">{{ sources(row).length }}</template>
-      </el-table-column>
-      <el-table-column v-if="admin" prop="username" label="提问人" width="90" />
-      <el-table-column label="时间" width="170">
-        <template #default="{ row }">{{ (row.createTime || "").replace("T", " ") }}</template>
-      </el-table-column>
-    </el-table>
+          </template>
+        </el-table-column>
+        <el-table-column label="问题" min-width="300">
+          <template #default="{ row }"><span class="question">{{ row.question }}</span></template>
+        </el-table-column>
+        <el-table-column label="反馈" width="96">
+          <template #default="{ row }">
+            <el-tag v-if="row.feedback === 1" type="success" round>👍 有用</el-tag>
+            <el-tooltip v-else-if="row.feedback === -1" :content="row.feedbackComment || '未填写原因'">
+              <el-tag type="danger" round>👎 没用</el-tag>
+            </el-tooltip>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="会话" width="100">
+          <template #default="{ row }">
+            <el-button v-if="row.sessionId" link type="primary" icon="ChatDotRound" @click="showSession(row.sessionId)">
+              {{ sessionCount(row.sessionId) }} 轮
+            </el-button>
+          </template>
+        </el-table-column>
+        <el-table-column label="来源" width="70" align="center">
+          <template #default="{ row }">{{ sources(row).length }}</template>
+        </el-table-column>
+        <el-table-column v-if="admin" label="提问人" width="110">
+          <template #default="{ row }">
+            <div class="asker"><el-avatar :size="22">{{ (row.username || '?').slice(0, 1).toUpperCase() }}</el-avatar>{{ row.username }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="时间" width="170">
+          <template #default="{ row }"><span class="muted">{{ (row.createTime || "").replace("T", " ") }}</span></template>
+        </el-table-column>
+        <template #empty><el-empty description="暂无问答记录" :image-size="90" /></template>
+      </el-table>
+    </div>
 
     <!-- 查看整段多轮对话 -->
-    <el-dialog v-model="sessionVisible" title="完整对话" width="760px">
+    <el-drawer v-model="sessionVisible" title="完整对话" size="640px">
       <div v-for="r in sessionRows" :key="r.id" class="round">
-        <div class="q">问：{{ r.question }}</div>
-        <div v-if="r.rewrittenQuestion" class="meta">改写：{{ r.rewrittenQuestion }}</div>
-        <div class="a" v-html="md(r.answer)" />
+        <div class="q-row"><span class="q">{{ r.question }}</span></div>
+        <div v-if="r.rewrittenQuestion" class="meta"><el-icon><Connection /></el-icon>改写：{{ r.rewrittenQuestion }}</div>
+        <div class="a markdown" v-html="md(r.answer)" />
       </div>
-    </el-dialog>
-  </el-card>
+    </el-drawer>
+  </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-import { marked } from 'marked'
+import { md } from '../markdown'
+import PageHeader from '../components/PageHeader.vue'
+import StatCard from '../components/StatCard.vue'
 import api from '../api'
 import { isAdmin } from '../kb'
 
@@ -91,7 +105,8 @@ const sessionVisible = ref(false)
 const sessionRows = ref([])
 const allRows = ref([])     // 未筛选的数据，用于统计每个会话的轮数
 
-const md = t => marked.parse(t || '')
+const keyword = ref('')
+const shown = computed(() => list.value.filter(r => !keyword.value || (r.question || '').includes(keyword.value)))
 const satisfaction = computed(() => Math.round(stats.value.up * 100 / (stats.value.up + stats.value.down)))
 
 /** sources 字段是 JSON 字符串，解析失败时返回空数组 */
@@ -140,13 +155,20 @@ onMounted(load)
 </script>
 
 <style scoped>
-.hd { display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.stats { display: flex; gap: 14px; font-size: 13px; color: #606266; margin-left: auto; }
-.up { color: #67c23a; }
-.down { color: #f56c6c; }
-.detail { padding: 0 20px; }
-.meta { font-size: 12px; color: #909399; }
-.muted { color: #c0c4cc; }
-.round { border-bottom: 1px solid #f0f0f0; padding: 8px 0; }
-.q { font-weight: 500; }
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 16px; }
+.filter { margin-bottom: 16px; }
+.kw { width: 260px; }
+.question { font-weight: 500; color: var(--text-1); }
+.detail { padding: 8px 48px 16px; }
+.meta { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
+.reason { margin-bottom: 10px; }
+.answer { background: #fafbfd; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }
+.refs { margin-top: 10px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.ref-label { font-size: 12px; color: var(--text-3); }
+.asker { display: flex; align-items: center; gap: 6px; }
+.round { padding: 4px 0 20px; }
+.q-row { display: flex; justify-content: flex-end; margin-bottom: 8px; }
+.q { background: linear-gradient(135deg, #4f46e5, #6d5df6); color: #fff; padding: 8px 14px; border-radius: 14px 4px 14px 14px; max-width: 85%; }
+.a { background: #fff; border: 1px solid var(--border); border-radius: 4px 14px 14px 14px; padding: 12px 16px; }
+@media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, 1fr); } }
 </style>

@@ -18,12 +18,12 @@ const router = createRouter({
       component: Layout,
       redirect: '/chat',
       children: [
-        { path: 'chat', component: Chat },
-        { path: 'documents', component: Documents },
-        { path: 'history', component: History },
-        { path: 'kbs', component: KbManage, meta: { admin: true } },
-        { path: 'users', component: Users, meta: { admin: true } },
-        { path: 'eval', component: Eval, meta: { admin: true } },
+        { path: 'chat', component: Chat, meta: { title: '智能问答', icon: 'ChatDotRound' } },
+        { path: 'documents', component: Documents, meta: { title: '文档管理', icon: 'Document' } },
+        { path: 'history', component: History, meta: { title: '问答历史', icon: 'Clock' } },
+        { path: 'kbs', component: KbManage, meta: { admin: true, title: '知识库管理', icon: 'Collection', group: '系统管理' } },
+        { path: 'users', component: Users, meta: { admin: true, title: '用户管理', icon: 'User', group: '系统管理' } },
+        { path: 'eval', component: Eval, meta: { admin: true, title: '效果评测', icon: 'DataAnalysis', group: '系统管理' } },
       ],
     },
   ],
@@ -34,5 +34,8 @@ router.beforeEach(to => {
   if (to.meta.admin && localStorage.getItem('role') !== 'admin') return '/chat'
   return true
 })
+
+// 浏览器标签页标题
+router.afterEach(to => { document.title = (to.meta.title ? to.meta.title + ' · ' : '') + '星辰智造 · 企业AI知识库' })
 
 export default router
