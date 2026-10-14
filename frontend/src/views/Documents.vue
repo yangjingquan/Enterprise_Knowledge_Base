@@ -110,6 +110,7 @@
             <el-input v-model="url" clearable size="large" placeholder="https://..." prefix-icon="Link" @keydown.enter.prevent="importUrl" />
             <el-button type="primary" size="large" :loading="importing" @click="importUrl">导入</el-button>
           </div>
+          <el-alert v-if="urlError" type="error" :title="urlError" show-icon :closable="false" class="url-error" />
           <p class="tip">抓取网页正文入库；需要登录才能访问的网页无法导入。</p>
         </el-tab-pane>
       </el-tabs>
@@ -139,6 +140,7 @@ const loading = ref(false)
 const uploading = ref(0)      // 正在上传的文件数（支持多选）
 const importing = ref(false)
 const url = ref('')
+const urlError = ref('')   // 网页导入失败原因（显示在弹窗内）
 const kbs = ref([])
 const filterKb = ref(null)
 const targetKb = ref(null)
@@ -192,7 +194,10 @@ function check(f) {
   return true
 }
 
+let uploadFailed = false    // 本批（可多选）上传中是否有失败的文件
+
 async function upload({ file }) {
+  if (uploading.value === 0) uploadFailed = false
   uploading.value++
   const fd = new FormData()
   fd.append('file', file)
@@ -200,10 +205,24 @@ async function upload({ file }) {
   try {
     await api.post('/documents/upload', fd)
     ElMessage.success(`${file.name} 上传成功，正在后台处理`)
-    load()
+  } catch (e) {
+    uploadFailed = true   // 错误信息已由 api 拦截器弹出，弹窗保持打开便于重试
   } finally {
     uploading.value--
+    if (uploading.value === 0) {
+      load()
+      // 整批都成功才自动关闭弹窗；有失败时保持打开
+      if (!uploadFailed) closeDialog()
+    }
   }
+}
+
+/** 关闭上传弹窗并重置表单 */
+function closeDialog() {
+  dialog.value = false
+  url.value = ''
+  urlError.value = ''
+  tab.value = 'file'
 }
 
 /** 网页导入：后端会先下载网页，打不开会立即提示原因 */
@@ -213,12 +232,21 @@ async function importUrl() {
     ElMessage.warning('请输入以 http:// 或 https:// 开头的网址')
     return
   }
+  if (!targetKb.value) {
+    ElMessage.warning('请先选择要导入到的知识库')
+    return
+  }
   importing.value = true
+  urlError.value = ''
   try {
-    const d = await api.post('/documents/url', { url: u, kbId: targetKb.value }, { timeout: 60000 })
+    const d = await api.post('/documents/url', { url: u, kbId: targetKb.value }, { timeout: 90000 })
     ElMessage.success(`已导入「${d.title}」，正在后台处理`)
-    url.value = ''
+    closeDialog()
     load()
+  } catch (e) {
+    // 失败时弹窗保持打开，并在输入框下方显示原因
+    urlError.value = e.response?.data?.error
+      || (e.code === 'ECONNABORTED' ? '导入超时：网页下载太慢，请稍后重试' : '导入失败，请检查网址后重试')
   } finally {
     importing.value = false
   }
@@ -276,6 +304,7 @@ onUnmounted(() => clearInterval(timer))
 .up-types span { font-size: 12px; padding: 2px 8px; border-radius: 6px; background: #f1f2f6; color: var(--text-2); }
 .uploading { margin-top: 10px; color: var(--brand); display: flex; align-items: center; gap: 6px; font-size: 13px; }
 .url-row { display: flex; gap: 10px; }
+.url-error { margin-top: 10px; }
 .tip { color: var(--text-3); font-size: 12px; }
 .tip-alert { margin-top: 12px; }
 @media (max-width: 1100px) { .stats { grid-template-columns: repeat(2, 1fr); } }

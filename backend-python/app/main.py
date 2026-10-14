@@ -146,6 +146,9 @@ def fetch_url(req: FetchUrlReq):
         return web_fetch.fetch(req.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:   # 兜底：未预料的错误也返回可读原因，而不是 500
+        logging.getLogger(__name__).exception("fetch-url failed: %s", req.url)
+        raise HTTPException(status_code=400, detail=f"网页解析失败（{e.__class__.__name__}）")
 
 
 @app.get("/documents/{document_id}/context")
