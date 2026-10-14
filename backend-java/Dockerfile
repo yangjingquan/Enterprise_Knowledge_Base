@@ -1,5 +1,7 @@
 FROM maven:3.9-eclipse-temurin-21 AS build
 WORKDIR /src
+# 限制构建时 Maven 内存，避免在小内存服务器上构建挤占其他服务
+ENV MAVEN_OPTS="-Xmx384m -XX:+UseSerialGC"
 # 国内网络使用阿里云 Maven 镜像，避免 Maven Central 下载超时
 COPY settings.xml /root/.m2/settings.xml
 COPY pom.xml .

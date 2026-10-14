@@ -1,0 +1,91 @@
+# 生产部署（服务器 kb.nexbyte.top）专用编排文件
+# - 项目名固定为 ai-kb，所有容器/卷都带 ai-kb 前缀，和服务器上其他项目隔离
+# - 不包含 MySQL：复用服务器上已有的 shop-mysql，库名 ai_kb，专用账号只授权 ai_kb.*
+# - 不映射任何宿主机端口：加入已有的 shop_shop-net 网络，由 shop-nginx 通过别名 ai-kb-web 反向代理 443
+# - 每个容器都设置了严格的内存上限（服务器只有 4GB 内存）
+# - 机密配置全部来自 /opt/ai-kb/.env（chmod 600，不进 Git）
+# 用法：docker compose -p ai-kb -f docker-compose.prod.yml up -d --build
+name: ai-kb
+
+services:
+  backend-python:
+    build:
+      context: ./backend-python
+      args:
+        WITH_LOCAL_MODELS: "false"
+    image: ai-kb-backend-python:latest
+    container_name: ai-kb-backend-python
+    restart: unless-stopped
+    mem_limit: 768m
+    memswap_limit: 1g
+    env_file: /opt/ai-kb/.env
+    environment:
+      EMBEDDING_PROVIDER: dashscope
+      RERANK_PROVIDER: dashscope
+      CHROMA_DIR: /data/chroma_db
+      UPLOAD_DIR: /data/uploads
+      OCR_ENABLED: "true"
+      OCR_MAX_SIDE: "1600"
+      OCR_DPI: "150"
+      INGEST_SERIAL: "true"
+      EVAL_REPORT: /data/chroma_db/eval-report.md
+      TZ: Asia/Shanghai
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]
+    volumes:
+      - ai-kb-chroma:/data/chroma_db
+      - ai-kb-uploads:/data/uploads
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+    networks:
+      shop-net:
+        aliases: [ai-kb-py]
+
+  backend-java:
+    build: ./backend-java
+    image: ai-kb-backend-java:latest
+    container_name: ai-kb-backend-java
+    restart: unless-stopped
+    mem_limit: 384m
+    memswap_limit: 512m
+    env_file: /opt/ai-kb/.env
+    environment:
+      JAVA_TOOL_OPTIONS: "-Xms64m -Xmx256m -XX:MaxMetaspaceSize=128m -XX:+UseSerialGC -Xss512k -XX:ReservedCodeCacheSize=48m"
+      DB_HOST: shop-mysql
+      DB_PORT: "3306"
+      DB_NAME: ai_kb
+      RAG_URL: http://ai-kb-py:8000
+      UPLOAD_DIR: /data/uploads
+      TZ: Asia/Shanghai
+    volumes:
+      - ai-kb-uploads:/data/uploads
+    depends_on:
+      backend-python: { condition: service_healthy }
+    networks:
+      shop-net:
+        aliases: [ai-kb-api]
+
+  frontend:
+    build: ./frontend
+    image: ai-kb-frontend:latest
+    container_name: ai-kb-frontend
+    restart: unless-stopped
+    mem_limit: 64m
+    depends_on: [backend-java]
+    networks:
+      shop-net:
+        aliases: [ai-kb-web]
+
+networks:
+  shop-net:
+    name: shop_shop-net
+    external: true
+
+volumes:
+  ai-kb-chroma:
+    name: ai-kb-chroma
+  ai-kb-uploads:
+    name: ai-kb-uploads

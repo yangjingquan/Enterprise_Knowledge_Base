@@ -9,94 +9,131 @@
 -->
 <template>
   <div class="chat">
-    <el-card class="side">
-      <b>知识库</b>
+    <!-- 左侧：检索范围设置 -->
+    <aside class="side panel">
+      <el-button type="primary" class="new-btn" icon="Plus" :disabled="loading" @click="newChat">新建对话</el-button>
+      <div class="sec-title"><el-icon><Collection /></el-icon>知识库</div>
       <!-- 只列出当前用户有权限的知识库；不选表示在全部有权限的知识库中检索 -->
       <el-select v-model="kbId" class="kb-select" placeholder="全部有权限的知识库" clearable @change="docId = null">
         <el-option v-for="k in kbs" :key="k.id" :label="k.name" :value="k.id" />
       </el-select>
-      <b>文档范围</b>
-      <el-radio-group v-model="docId" class="docs">
-        <el-radio :value="null">该范围内全部文档</el-radio>
-        <el-radio v-for="d in scopedDocs" :key="d.id" :value="d.id">{{ d.fileName }}</el-radio>
-      </el-radio-group>
-      <div class="samples">
-        <b>示例问题</b>
-        <el-button v-for="s in samples" :key="s" size="small" text bg @click="ask(s)">{{ s }}</el-button>
-      </div>
-    </el-card>
+      <div class="sec-title"><el-icon><Files /></el-icon>文档范围<span class="cnt">{{ scopedDocs.length }}</span></div>
+      <el-scrollbar class="doc-scroll">
+        <div :class="['doc', { on: docId === null }]" @click="docId = null">
+          <el-icon><FolderOpened /></el-icon><span>该范围内全部文档</span>
+        </div>
+        <div v-for="d in scopedDocs" :key="d.id" :class="['doc', { on: docId === d.id }]" :title="d.fileName" @click="docId = d.id">
+          <span class="ext" :style="{ background: extColor(d.fileType) }">{{ extLabel(d.fileType) }}</span>
+          <span class="doc-name">{{ d.fileName }}</span>
+        </div>
+        <el-skeleton v-if="docsLoading" :rows="4" animated style="padding:8px" />
+      </el-scrollbar>
+    </aside>
 
-    <el-card class="main" body-style="display:flex;flex-direction:column;height:100%;box-sizing:border-box">
+    <!-- 右侧：对话区 -->
+    <section class="main panel">
       <div class="top">
-        <span class="session-tip">
-          {{ rounds ? `当前对话 ${rounds} 轮，追问会自动结合上文` : '新对话' }}
-        </span>
-        <el-button size="small" icon="Plus" :disabled="loading" @click="newChat">新对话</el-button>
+        <div class="top-title">
+          <b>{{ rounds ? '当前对话' : '新对话' }}</b>
+          <el-tag v-if="rounds" size="small" round effect="plain">{{ rounds }} 轮 · 追问会自动结合上文</el-tag>
+        </div>
+        <div class="scope">
+          <el-icon><Search /></el-icon>
+          检索范围：{{ scopeText }}
+        </div>
       </div>
 
-      <div class="msgs" ref="box">
-        <el-empty v-if="!msgs.length" description="上传文档后，在下方用自然语言提问；可以直接追问，例如“那满20年呢？”" />
-        <div v-for="(m, i) in msgs" :key="i" :class="['msg', m.role]">
-          <div class="bubble">
-            <template v-if="m.role === 'user'">{{ m.text }}</template>
-            <template v-else>
-              <!-- 多轮时显示改写后的问题，便于用户确认系统理解是否正确 -->
-              <div v-if="m.rewrite" class="rewrite">已结合上文理解为：{{ m.rewrite }}</div>
-              <div class="answer" v-html="md(m.text)" />
-              <div v-if="m.error" class="err">{{ m.error }}</div>
+      <div ref="box" class="msgs">
+        <div class="inner">
+          <!-- 空状态：欢迎语 + 推荐问题 -->
+          <div v-if="!msgs.length" class="welcome">
+            <div class="w-logo"><el-icon><MagicStick /></el-icon></div>
+            <h2>你好，{{ displayName }}，有什么可以帮你？</h2>
+            <p>我会从企业知识库中检索资料并给出带出处的回答，支持连续追问，例如“那满20年呢？”</p>
+            <div class="suggest">
+              <div v-for="s in samples" :key="s.q" class="sg" @click="ask(s.q)">
+                <span class="sg-icon">{{ s.icon }}</span>
+                <div><b>{{ s.t }}</b><span>{{ s.q }}</span></div>
+              </div>
+            </div>
+          </div>
 
-              <!-- 引用来源：点击打开原文 -->
-              <div v-if="m.sources?.length" class="src">
-                <div class="src-title">引用来源（点击查看原文）</div>
-                <div v-for="s in m.sources" :key="s.index" class="s" @click="openSource(s)">
-                  <el-tag size="small" effect="plain">[{{ s.index }}]</el-tag>
-                  <span class="s-name">{{ s.file_name }}</span>
-                  <span class="s-loc">{{ sourceLocation(s) }}</span>
-                  <el-tag v-if="s.ocr" size="small" type="info">OCR</el-tag>
-                  <el-tooltip :content="scoreDetail(s)" placement="top">
-                    <span class="s-score">相关度 {{ s.score }}</span>
-                  </el-tooltip>
-                  <el-icon class="s-open"><View /></el-icon>
+          <div v-for="(m, i) in msgs" :key="i" :class="['msg', m.role]">
+            <div v-if="m.role === 'ai'" class="av ai-av"><el-icon><MagicStick /></el-icon></div>
+            <div class="body">
+              <div v-if="m.role === 'user'" class="bubble">{{ m.text }}</div>
+              <template v-else>
+                <!-- 多轮时显示改写后的问题，便于用户确认系统理解是否正确 -->
+                <div v-if="m.rewrite" class="rewrite"><el-icon><Connection /></el-icon>已结合上文理解为：{{ m.rewrite }}</div>
+                <div class="ai-card">
+                  <div class="markdown" v-html="md(m.text)" />
+                  <span v-if="loading && streaming && i === msgs.length - 1" class="caret" />
+                  <el-alert v-if="m.error" :title="m.error" :type="m.error.includes('已停止') ? 'info' : 'error'" :closable="false" show-icon class="err" />
+
+                  <!-- 引用来源卡片：点击打开原文 -->
+                  <div v-if="m.sources?.length" class="src">
+                    <div class="src-title"><el-icon><Reading /></el-icon>引用来源 · {{ m.sources.length }} 条（点击查看原文）</div>
+                    <div class="src-grid">
+                      <div v-for="s in m.sources" :key="s.index" class="s" @click="openSource(s)">
+                        <span class="s-idx">{{ s.index }}</span>
+                        <div class="s-main">
+                          <div class="s-name" :title="s.file_name">{{ s.file_name }}</div>
+                          <div class="s-meta">
+                            <span>{{ sourceLocation(s) }}</span>
+                            <el-tag v-if="s.ocr" size="small" type="info" effect="plain">OCR</el-tag>
+                            <el-tooltip :content="scoreDetail(s)" placement="top">
+                              <span class="s-score">相关度 {{ s.score }}</span>
+                            </el-tooltip>
+                          </div>
+                        </div>
+                        <el-icon class="s-open"><View /></el-icon>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
 
-              <!-- 答案反馈：历史保存成功（拿到 historyId）后才显示 -->
-              <div v-if="m.historyId" class="fb">
-                <el-button
-                  size="small"
-                  :type="m.feedback === 1 ? 'success' : ''"
-                  :plain="m.feedback !== 1"
-                  @click="feedback(m, 1)"
-                >👍 有用</el-button>
-                <el-button
-                  size="small"
-                  :type="m.feedback === -1 ? 'danger' : ''"
-                  :plain="m.feedback !== -1"
-                  @click="feedback(m, -1)"
-                >👎 没用</el-button>
-                <span v-if="m.feedbackComment" class="fb-comment">原因：{{ m.feedbackComment }}</span>
-              </div>
-            </template>
+                <!-- 操作栏：复制 + 反馈（历史保存成功后才显示反馈） -->
+                <div v-if="m.text && !(loading && i === msgs.length - 1)" class="fb">
+                  <el-tooltip content="复制回答"><el-button text circle size="small" icon="CopyDocument" @click="copy(m.text)" /></el-tooltip>
+                  <template v-if="m.historyId">
+                    <el-button size="small" round :type="m.feedback === 1 ? 'success' : ''" :plain="m.feedback === 1" @click="feedback(m, 1)">👍 有用</el-button>
+                    <el-button size="small" round :type="m.feedback === -1 ? 'danger' : ''" :plain="m.feedback === -1" @click="feedback(m, -1)">👎 没用</el-button>
+                    <span v-if="m.feedbackComment" class="fb-comment">原因：{{ m.feedbackComment }}</span>
+                  </template>
+                </div>
+              </template>
+            </div>
+            <el-avatar v-if="m.role === 'user'" :size="34" class="av user-av">{{ initial }}</el-avatar>
+          </div>
+
+          <!-- 正在检索：打字指示器 -->
+          <div v-if="loading && !streaming" class="msg ai">
+            <div class="av ai-av"><el-icon><MagicStick /></el-icon></div>
+            <div class="body"><div class="ai-card typing">
+              <span class="dots"><i /><i /><i /></span>
+              {{ rounds ? '正在结合上文理解问题、检索文档…' : '正在检索文档并生成答案…' }}
+            </div></div>
           </div>
         </div>
-        <div v-if="loading && !streaming" class="msg ai">
-          <div class="bubble">{{ rounds ? '正在结合上文理解问题、检索文档…' : '正在检索文档并生成答案…' }}</div>
-        </div>
       </div>
 
-      <div class="input">
-        <el-input
-          v-model="q"
-          type="textarea"
-          :rows="2"
-          resize="none"
-          placeholder="请输入问题，Enter 发送，Shift+Enter 换行"
-          @keydown.enter.exact.prevent="ask()"
-        />
-        <el-button v-if="loading" type="warning" @click="stop">停止生成</el-button>
-        <el-button v-else type="primary" @click="ask()">发送</el-button>
+      <!-- 输入框 -->
+      <div class="composer">
+        <div class="input-box">
+          <el-input
+            v-model="q"
+            type="textarea"
+            :autosize="{ minRows: 1, maxRows: 6 }"
+            resize="none"
+            placeholder="输入你的问题，Enter 发送，Shift+Enter 换行"
+            @keydown.enter.exact.prevent="ask()"
+          />
+          <el-button v-if="loading" class="send stop" circle @click="stop"><el-icon><VideoPause /></el-icon></el-button>
+          <el-button v-else type="primary" class="send" circle :disabled="!q.trim()" @click="ask()"><el-icon><Promotion /></el-icon></el-button>
+        </div>
+        <div class="hint">回答由 AI 基于知识库生成，请以引用原文为准</div>
       </div>
-    </el-card>
+    </section>
 
     <SourceViewer ref="viewer" />
   </div>
@@ -104,7 +141,7 @@
 
 <script setup>
 import { ref, reactive, computed, nextTick, onMounted, watch } from 'vue'
-import { marked } from 'marked'
+import { md } from '../markdown'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import SourceViewer from '../components/SourceViewer.vue'
@@ -130,14 +167,28 @@ const sessionId = ref(newSessionId())
 let controller = null      // 用于“停止生成”
 
 const samples = [
-  '出现E-03故障代码应该如何处理？',
-  '工作满10年有几天年假？',
-  'C类员工去上海出差，每晚住宿上限是多少？',
-  'LF-10滤芯多少钱一个，现在库存多少？',
-  '新员工入职第一周要办哪些事？',
+  { icon: '🛠️', t: '设备故障', q: '出现E-03故障代码应该如何处理？' },
+  { icon: '🌴', t: '假期制度', q: '工作满10年有几天年假？' },
+  { icon: '✈️', t: '差旅报销', q: 'C类员工去上海出差，每晚住宿上限是多少？' },
+  { icon: '📦', t: '备件库存', q: 'LF-10滤芯多少钱一个，现在库存多少？' },
+  { icon: '🎓', t: '入职指引', q: '新员工入职第一周要办哪些事？' },
+  { icon: '🧾', t: '费用报销', q: '报销需要在多长时间内提交？' },
 ]
+const displayName = localStorage.getItem('displayName') || localStorage.getItem('username')
+const initial = (displayName || '?').slice(0, 1).toUpperCase()
+const docsLoading = ref(true)
+const EXT = { pdf: ['PDF', '#ef4444'], docx: ['DOC', '#2563eb'], xlsx: ['XLS', '#16a34a'], pptx: ['PPT', '#ea580c'], txt: ['TXT', '#64748b'], md: ['MD', '#0f172a'], url: ['WEB', '#7c3aed'] }
+const extLabel = t => EXT[t]?.[0] || (t || '?').toUpperCase().slice(0, 3)
+const extColor = t => EXT[t]?.[1] || '#64748b'
+const scopeText = computed(() => {
+  if (docId.value) return docs.value.find(d => d.id === docId.value)?.fileName || '指定文档'
+  if (kbId.value) return kbs.value.find(k => k.id === kbId.value)?.name || '指定知识库'
+  return '全部有权限的知识库'
+})
+async function copy(t) {
+  try { await navigator.clipboard.writeText(t); ElMessage.success('已复制') } catch { ElMessage.warning('复制失败，请手动选择文本') }
+}
 
-const md = t => marked.parse(t || '')
 
 /** 选中知识库后，文档列表只显示该知识库的文档 */
 const scopedDocs = computed(() => kbId.value ? docs.value.filter(d => d.kbId === kbId.value) : docs.value)
@@ -336,36 +387,80 @@ onMounted(async () => {
   const [docList, kbList] = await Promise.all([api.get('/documents'), fetchMyKbs()])
   docs.value = docList.filter(d => d.status === 'ready')
   kbs.value = kbList
+  docsLoading.value = false
 })
 </script>
 
 <style scoped>
-.chat { display: flex; gap: 16px; height: calc(100vh - 100px); }
-.side { width: 260px; overflow: auto; }
-.main { flex: 1; min-width: 0; }
-.kb-select { width: 100%; margin: 8px 0 16px; }
-.docs { display: flex; flex-direction: column; align-items: flex-start; margin: 10px 0 20px; }
-.samples { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; }
-.samples .el-button { margin: 0; white-space: normal; text-align: left; height: auto; padding: 6px 8px; }
-.top { display: flex; justify-content: space-between; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #f0f0f0; }
-.session-tip { color: #999; font-size: 12px; }
-.msgs { flex: 1; overflow: auto; padding: 8px; }
-.msg { display: flex; margin: 12px 0; }
+.chat { display: flex; gap: 16px; height: calc(100vh - 112px); min-height: 520px; }
+.side { width: 272px; flex-shrink: 0; padding: 16px; display: flex; flex-direction: column; }
+.new-btn { width: 100%; height: 40px; margin-bottom: 18px; background: linear-gradient(90deg, #4f46e5, #7c3aed); border: none; }
+.sec-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 4px 0 8px; }
+.sec-title .cnt { margin-left: auto; font-weight: 500; color: var(--text-3); font-size: 12px; }
+.kb-select { width: 100%; margin-bottom: 18px; }
+.doc-scroll { flex: 1; margin: 0 -6px; }
+.doc { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 0 6px 2px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-2); transition: background .15s; }
+.doc:hover { background: #f5f6fb; }
+.doc.on { background: var(--brand-soft); color: var(--brand); font-weight: 600; }
+.ext { font-size: 10px; color: #fff; padding: 1px 4px; border-radius: 4px; font-weight: 700; flex-shrink: 0; min-width: 30px; text-align: center; }
+.doc-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.main { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden; }
+.top { display: flex; justify-content: space-between; align-items: center; padding: 14px 24px; border-bottom: 1px solid var(--border); gap: 12px; }
+.top-title { display: flex; align-items: center; gap: 10px; }
+.top-title b { font-size: 15px; }
+.scope { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 4px; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.msgs { flex: 1; overflow: auto; background: linear-gradient(180deg, #fbfbfe 0%, #fff 240px); }
+.inner { max-width: 860px; margin: 0 auto; padding: 24px 24px 8px; }
+.welcome { text-align: center; padding: 6vh 0 12px; }
+.w-logo { width: 64px; height: 64px; margin: 0 auto 18px; border-radius: 20px; display: grid; place-items: center; color: #fff; font-size: 32px;
+  background: linear-gradient(135deg, #6366f1, #a855f7); box-shadow: 0 12px 30px rgba(99, 102, 241, .35); }
+.welcome h2 { margin: 0 0 8px; font-size: 24px; }
+.welcome p { color: var(--text-3); margin: 0 0 32px; font-size: 14px; }
+.suggest { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; text-align: left; }
+.sg { display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border: 1px solid var(--border); border-radius: 12px; background: #fff; cursor: pointer; transition: all .2s; }
+.sg:hover { border-color: #c7d2fe; box-shadow: var(--shadow); transform: translateY(-2px); }
+.sg-icon { font-size: 22px; }
+.sg b { display: block; font-size: 13px; margin-bottom: 2px; }
+.sg span { font-size: 13px; color: var(--text-2); line-height: 1.5; }
+.msg { display: flex; gap: 12px; margin: 0 0 24px; align-items: flex-start; }
 .msg.user { justify-content: flex-end; }
-.bubble { max-width: 80%; padding: 10px 14px; border-radius: 8px; background: #f0f2f5; line-height: 1.6; }
-.user .bubble { background: #409eff; color: #fff; white-space: pre-wrap; }
-.rewrite { font-size: 12px; color: #909399; margin-bottom: 4px; }
-.err { color: #f56c6c; margin-top: 6px; }
-.answer :deep(table) { border-collapse: collapse; }
-.answer :deep(td), .answer :deep(th) { border: 1px solid #ddd; padding: 3px 8px; }
-.src { margin-top: 8px; border-top: 1px dashed #ddd; padding-top: 6px; }
-.src-title { font-size: 12px; color: #909399; margin-bottom: 4px; }
-.s { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 6px; border-radius: 4px; cursor: pointer; }
-.s:hover { background: #e6f0ff; }
-.s-name { font-weight: 500; }
-.s-loc, .s-score { color: #909399; font-size: 12px; }
-.s-open { margin-left: auto; color: #409eff; }
+.av { flex-shrink: 0; }
+.ai-av { width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: #fff; font-size: 18px; background: linear-gradient(135deg, #6366f1, #a855f7); }
+.user-av { background: #334155; font-weight: 600; }
+.body { min-width: 0; max-width: calc(100% - 46px); }
+.msg.ai .body { flex: 1; }
+.bubble { padding: 10px 16px; border-radius: 16px 4px 16px 16px; background: linear-gradient(135deg, #4f46e5, #6d5df6); color: #fff; line-height: 1.7; white-space: pre-wrap; box-shadow: 0 4px 12px rgba(79, 70, 229, .2); }
+.rewrite { font-size: 12px; color: var(--text-3); margin-bottom: 6px; display: flex; align-items: center; gap: 4px; }
+.ai-card { background: #fff; border: 1px solid var(--border); border-radius: 4px 16px 16px 16px; padding: 14px 18px; box-shadow: var(--shadow-sm); }
+.caret { display: inline-block; width: 8px; height: 16px; background: var(--brand); vertical-align: text-bottom; animation: blink 1s steps(2) infinite; border-radius: 2px; }
+@keyframes blink { 50% { opacity: 0; } }
+.err { margin-top: 10px; }
+.typing { color: var(--text-3); font-size: 13px; display: flex; align-items: center; gap: 10px; }
+.dots { display: inline-flex; gap: 4px; }
+.dots i { width: 6px; height: 6px; border-radius: 50%; background: var(--brand); animation: bounce 1.2s infinite ease-in-out; }
+.dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
+@keyframes bounce { 0%, 80%, 100% { transform: scale(.5); opacity: .4; } 40% { transform: scale(1); opacity: 1; } }
+.src { margin-top: 14px; padding-top: 12px; border-top: 1px dashed var(--border); }
+.src-title { font-size: 12px; color: var(--text-3); margin-bottom: 8px; display: flex; align-items: center; gap: 4px; }
+.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 8px; }
+.s { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 10px; cursor: pointer; background: #fafbfd; transition: all .15s; }
+.s:hover { border-color: #a5b4fc; background: var(--brand-soft); }
+.s-idx { width: 22px; height: 22px; border-radius: 6px; background: var(--brand-soft); color: var(--brand); font-size: 12px; font-weight: 700; display: grid; place-items: center; flex-shrink: 0; }
+.s-main { min-width: 0; flex: 1; }
+.s-name { font-size: 13px; font-weight: 600; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.s-meta { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--text-3); margin-top: 2px; }
+.s-score { cursor: help; }
+.s-open { color: var(--text-3); }
+.s:hover .s-open { color: var(--brand); }
 .fb { margin-top: 8px; display: flex; align-items: center; gap: 4px; }
-.fb-comment { font-size: 12px; color: #909399; margin-left: 8px; }
-.input { display: flex; gap: 10px; align-items: flex-end; margin-top: 10px; }
+.fb .el-button + .el-button { margin-left: 4px; }
+.fb-comment { font-size: 12px; color: var(--text-3); margin-left: 8px; }
+.composer { padding: 12px 24px 14px; }
+.input-box { max-width: 860px; margin: 0 auto; display: flex; align-items: flex-end; gap: 10px; padding: 10px 10px 10px 16px; border: 1px solid var(--border); border-radius: 16px; background: #fff; box-shadow: var(--shadow); transition: border-color .2s, box-shadow .2s; }
+.input-box:focus-within { border-color: #a5b4fc; box-shadow: 0 0 0 4px rgba(99, 102, 241, .1), var(--shadow); }
+.input-box :deep(.el-textarea__inner) { box-shadow: none !important; padding: 6px 0; font-size: 14.5px; background: transparent; }
+.send { width: 38px; height: 38px; font-size: 18px; flex-shrink: 0; }
+.stop { background: #f97316; color: #fff; border: none; }
+.hint { text-align: center; font-size: 12px; color: var(--text-3); margin-top: 8px; }
+@media (max-width: 992px) { .side { display: none; } .chat { height: calc(100vh - 92px); } }
 </style>

@@ -4,38 +4,41 @@
   成员角色：查看（问答、看原文）/ 编辑（还可上传、删除文档）。
 -->
 <template>
-  <el-card>
-    <template #header>
-      <div class="hd">
-        <b>知识库管理</b>
-        <el-button type="primary" icon="Plus" @click="edit()">新建知识库</el-button>
-      </div>
-    </template>
-    <el-table :data="list" v-loading="loading">
-      <el-table-column prop="id" label="ID" width="60" />
-      <el-table-column prop="name" label="名称" width="160" />
-      <el-table-column prop="description" label="说明" />
-      <el-table-column label="可见范围" width="100">
-        <template #default="{ row }">
-          <el-tag :type="row.visibility === 'public' ? 'success' : 'info'" size="small">
-            {{ row.visibility === 'public' ? '公开' : '私有' }}
-          </el-tag>
-        </template>
-      </el-table-column>
-      <el-table-column prop="docCount" label="文档数" width="80" />
-      <el-table-column prop="memberCount" label="成员数" width="80" />
-      <el-table-column label="操作" width="200">
-        <template #default="{ row }">
-          <el-button link type="primary" @click="openMembers(row)">成员</el-button>
-          <el-button link type="primary" @click="edit(row)">编辑</el-button>
-          <el-popconfirm title="确定删除该知识库？（库中有文档时无法删除）" @confirm="remove(row)">
-            <template #reference>
-              <el-button link type="danger">删除</el-button>
-            </template>
+  <div class="page">
+    <PageHeader title="知识库管理" icon="Collection" desc="按部门划分知识库，设置可见范围与成员权限（查看 / 编辑）">
+      <el-button type="primary" icon="Plus" @click="edit()">新建知识库</el-button>
+    </PageHeader>
+
+    <el-skeleton v-if="loading && !list.length" :rows="6" animated class="panel panel-pad" />
+    <div v-else class="grid">
+      <div v-for="(row, i) in list" :key="row.id" class="kb panel">
+        <div class="kb-top">
+          <div class="kb-icon" :style="{ background: palette[i % palette.length] }"><el-icon><Folder /></el-icon></div>
+          <div class="kb-title">
+            <b>{{ row.name }}</b>
+            <el-tag :type="row.visibility === 'public' ? 'success' : 'info'" size="small" round effect="light">
+              {{ row.visibility === 'public' ? '公开 · 全员可查看' : '私有 · 仅成员' }}
+            </el-tag>
+          </div>
+        </div>
+        <p class="desc">{{ row.description || '暂无说明' }}</p>
+        <div class="kb-stats">
+          <div><b>{{ row.docCount ?? 0 }}</b><span>文档</span></div>
+          <div><b>{{ row.memberCount ?? 0 }}</b><span>成员</span></div>
+          <div><b>#{{ row.id }}</b><span>ID</span></div>
+        </div>
+        <div class="kb-actions">
+          <el-button text type="primary" icon="UserFilled" @click="openMembers(row)">成员</el-button>
+          <el-button text type="primary" icon="Edit" @click="edit(row)">编辑</el-button>
+          <el-popconfirm title="确定删除该知识库？（库中有文档时无法删除）" width="260" @confirm="remove(row)">
+            <template #reference><el-button text type="danger" icon="Delete">删除</el-button></template>
           </el-popconfirm>
-        </template>
-      </el-table-column>
-    </el-table>
+        </div>
+      </div>
+      <div class="kb add-card" @click="edit()">
+        <el-icon><Plus /></el-icon><span>新建知识库</span>
+      </div>
+    </div>
 
     <!-- 新建 / 编辑 -->
     <el-dialog v-model="formVisible" :title="form.id ? '编辑知识库' : '新建知识库'" width="480px">
@@ -96,13 +99,16 @@
         <el-button type="primary" @click="saveMembers">保存成员</el-button>
       </template>
     </el-dialog>
-  </el-card>
+  </div>
 </template>
 
 <script setup>
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import PageHeader from '../components/PageHeader.vue'
+
+const palette = ['linear-gradient(135deg,#6366f1,#8b5cf6)', 'linear-gradient(135deg,#0ea5e9,#22d3ee)', 'linear-gradient(135deg,#10b981,#34d399)', 'linear-gradient(135deg,#f59e0b,#fb923c)', 'linear-gradient(135deg,#ec4899,#f472b6)']
 
 const list = ref([])
 const loading = ref(false)
@@ -176,7 +182,21 @@ onMounted(load)
 </script>
 
 <style scoped>
-.hd { display: flex; justify-content: space-between; align-items: center; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 16px; }
+.kb { padding: 20px; display: flex; flex-direction: column; transition: transform .2s, box-shadow .2s; }
+.kb:hover { transform: translateY(-3px); box-shadow: var(--shadow-lg); }
+.kb-top { display: flex; gap: 12px; align-items: center; }
+.kb-icon { width: 46px; height: 46px; border-radius: 12px; display: grid; place-items: center; color: #fff; font-size: 22px; flex-shrink: 0; }
+.kb-title { display: flex; flex-direction: column; gap: 4px; align-items: flex-start; }
+.kb-title b { font-size: 16px; }
+.desc { color: var(--text-2); font-size: 13px; line-height: 1.6; min-height: 42px; margin: 14px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.kb-stats { display: grid; grid-template-columns: repeat(3, 1fr); background: #f8f9fc; border-radius: 10px; padding: 10px 0; text-align: center; }
+.kb-stats b { display: block; font-size: 18px; }
+.kb-stats span { font-size: 12px; color: var(--text-3); }
+.kb-actions { display: flex; justify-content: flex-end; margin-top: 12px; gap: 0; }
+.add-card { border: 2px dashed #d4d7e3; border-radius: var(--radius); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; color: var(--text-3); cursor: pointer; min-height: 240px; font-size: 14px; }
+.add-card .el-icon { font-size: 30px; }
+.add-card:hover { border-color: var(--brand); color: var(--brand); background: var(--brand-soft); }
 .add { display: flex; gap: 8px; margin-bottom: 12px; }
-.tip { color: #999; font-size: 12px; }
+.tip { color: var(--text-3); font-size: 12px; }
 </style>

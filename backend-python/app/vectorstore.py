@@ -1,24 +1,22 @@
 """
 向量化与存储。
 
-- 向量模型：BAAI/bge-m3（中文效果好，输出 1024 维向量）
+- 向量模型：见 embeddings.py（默认阿里云百炼 text-embedding-v3，可切回本地 bge-m3）
 - 向量库：Chroma，本地持久化到磁盘
-- 所有文档放在同一个集合 kb_docs 里，用元数据 document_id、kb_id 区分，
+- 所有文档放在同一个集合里（集合名随向量模型变化，见 embeddings.collection_name()），用元数据 document_id、kb_id 区分，
   按文档 / 按用户有权限的知识库检索时加过滤条件
 - 每次写入、删除都同步更新 BM25 关键词索引（见 bm25.py），保证两路检索的文本一致
 """
 import os
 import threading
 from functools import lru_cache
-from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_chroma import Chroma
 
-from . import bm25
+from . import bm25, embeddings
 
 # 以下配置都可通过环境变量覆盖
-EMBEDDING_MODEL = os.getenv("EMBEDDING_MODEL", "BAAI/bge-m3")
 CHROMA_DIR = os.getenv("CHROMA_DIR", "../chroma_db")
-COLLECTION = "kb_docs"
+COLLECTION = embeddings.collection_name()
 BATCH = 32   # 每批写入 32 块，避免一次性向量化过多导致内存暴涨
 # 入库锁：多个文档同时上传时排队向量化。CPU 上并发跑多个 bge-m3 会互相抢线程，
 # 实测 6 个文档并发比逐个处理慢十几倍，还会拖慢同时进行的问答检索
@@ -27,10 +25,10 @@ _INGEST_LOCK = threading.Lock()
 @lru_cache
 def get_store() -> Chroma:
     """
-    获取向量库对象。@lru_cache 保证全局只创建一次（加载模型很慢，约 2GB）。
-    normalize_embeddings=True 把向量归一化，配合余弦距离计算相似度。
+    获取向量库对象。@lru_cache 保证全局只创建一次（本地模型加载很慢，约 2GB；云端模式不加载模型）。
+    使用余弦距离计算相似度。
     """
-    emb = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL, encode_kwargs={"normalize_embeddings": True})
+    emb = embeddings.get_embeddings()
     return Chroma(collection_name=COLLECTION, embedding_function=emb,
                   persist_directory=CHROMA_DIR, collection_metadata={"hnsw:space": "cosine"})
 

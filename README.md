@@ -26,12 +26,12 @@
 ## 一键启动（Docker）
 
 ```bash
-cp .env.example .env        # 填入 DEEPSEEK_API_KEY
+cp .env.example .env        # 填入 DEEPSEEK_API_KEY 和 DASHSCOPE_API_KEY（阿里云百炼）
 docker compose up -d --build
 ```
 
-- 首次启动会下载 bge-m3（约 2.2GB），Python 服务就绪需要几分钟，可用 `docker compose logs -f backend-python` 查看
-- 国内网络默认使用 `https://hf-mirror.com` 镜像下载模型
+- 默认使用阿里云百炼云端向量（text-embedding-v3）和重排（gte-rerank-v2），不下载本地模型，Python 服务几秒即就绪
+- 想继续用本地 bge-m3：`.env` 中设 `EMBEDDING_PROVIDER=local`、`RERANK_PROVIDER=local`（或 `none`）、`WITH_LOCAL_MODELS=true`、`PY_MEM_LIMIT=6g`，国内网络经 `https://hf-mirror.com` 下载模型
 - 启动后访问 http://localhost:5173 ，演示账号 **admin / admin123**
 
 ## 本地开发启动
@@ -95,7 +95,50 @@ docker compose exec backend-python python -m eval.run_eval --judge    # 加大�
 `GET /api/me`、`GET /api/kbs`、`/api/admin/kbs[/{id}[/members]]`、`/api/admin/users[/{id}]`、`PUT /api/documents/{id}/kb`、`/api/admin/eval/run|status`；上传接口新增 `kbId` 参数，问答接口新增 `kbId` 字段。
 
 ### 资源占用
+**云端模式（默认，v0.4）**：见下文「4GB 内存服务器部署」。以下为本地模型模式：
 bge-m3 约 2.2GB、bge-reranker-v2-m3 约 2.2GB（首次启动经 hf-mirror 下载）。Python 容器运行时约占 5~5.5GB 内存。Docker Desktop 建议分配 ≥ 7GB；在 8GB 内存的电脑上建议设置 `RERANK_ENABLED=false`（约 3GB）。
+
+## 4GB 内存服务器部署（v0.4 低内存模式）
+
+向量化和重排改为调用阿里云百炼 API，本机不再加载 torch 和模型，Python 镜像从 2.25GB 降到 1.06GB。
+
+| 容器 | 内存上限 | 实测空闲 | 实测峰值 |
+|---|---|---|---|
+| backend-python | 1g（`PY_MEM_LIMIT`） | 约 130MB | 约 650MB（扫描件 OCR），问答约 300MB |
+| backend-java | 512m（堆 `-Xmx256m`） | 约 210MB | 约 250MB |
+| mysql | 512m（`innodb_buffer_pool_size=128M`，关闭 performance_schema） | 约 130MB | 约 180MB |
+| frontend（nginx） | 64m | 约 8MB | — |
+
+合计峰值约 1.1GB，4GB 服务器给系统留出足够余量（仍建议加 2GB swap 防止意外）。
+
+### 步骤
+1. 开通百炼并创建 API Key：https://bailian.console.aliyun.com/ → 「API-KEY」→ 创建（新用户有免费额度；text-embedding-v3 和 gte-rerank-v2 均按 token 计费，演示数据重建一次索引花费不到 1 分钱）。
+2. 在 `.env` 中添加（参考 `.env.example`）：
+   ```
+   DASHSCOPE_API_KEY=sk-你的百炼key
+   EMBEDDING_PROVIDER=dashscope
+   RERANK_PROVIDER=dashscope      # 不想用重排设为 none
+   ```
+3. 重新构建并启动：`docker compose up -d --build`
+4. 已有文档重建索引（升级时执行一次，约 15 秒/百块，不需要重新上传文件）：
+   ```
+   docker compose exec backend-python python -m app.reindex
+   docker compose restart backend-python
+   ```
+   脚本会把旧集合 `kb_docs`（bge-m3 向量）里的文本和元数据复制到新集合 `kb_docs_dashscope_v3_1024` 并重新计算向量；旧集合保留，可随时切回本地模式。
+   也可在服务运行中调用 `POST /admin/reindex`（Python 服务内网接口），`GET /admin/reindex` 查看进度。
+5. 检查：`docker compose exec backend-python python -c "import urllib.request;print(urllib.request.urlopen('http://localhost:8000/stats').read().decode())"`，`chunks_vector` 应等于文档块数。
+
+### 效果对比（60 题评测集，详见 docs/eval-report-dashscope.md）
+| 方案 | Hit@1 | Hit@3 | 单次检索平均耗时 |
+|---|---|---|---|
+| 本地 bge-m3 向量 / 混合 | 74.5% | 92.7% | — |
+| 本地 bge-m3 + bge-reranker | 90.9% | 100% | 约 3 秒（CPU） |
+| 百炼 v3 向量 / 混合 | 85.5% | 94.5% | 约 0.9~1.0 秒 |
+| 百炼 v3 + gte-rerank-v2 | 94.5% | 100% | 约 1.6 秒 |
+
+注意：百炼向量的相似度分布与 bge-m3 不同，无关问题也有 0.47~0.65，向量阈值（`SCORE_THRESHOLD`，云端默认 0.4）无法单独拒答，建议保持重排开启（拒答题 5 题中 4 题检索为空，剩下 1 题由大模型拒答）。
+云端重排调用失败时会自动退回混合检索，问答不中断。
 
 ## 演示步骤（1-2 分钟）
 

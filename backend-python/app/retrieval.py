@@ -12,6 +12,7 @@
 三种模式（便于评测对比）：vector（仅向量，原有逻辑）、hybrid（混合不重排）、rerank（混合 + 重排）。
 默认模式由 RETRIEVAL_MODE 决定；启用重排时为 rerank，否则为 hybrid。
 """
+import logging
 import os
 
 from langchain_core.documents import Document
@@ -19,7 +20,10 @@ from langchain_core.documents import Document
 from . import bm25, reranker, vectorstore
 
 # 向量检索相似度阈值（vector / hybrid 模式使用）
-SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD", "0.5"))
+# 不同向量模型的相似度分布不同：bge-m3 用 0.5；百炼 text-embedding-v3 整体偏低，默认 0.4（建议用评测集校准）
+SCORE_THRESHOLD = float(os.getenv("SCORE_THRESHOLD",
+                                  "0.5" if os.getenv("EMBEDDING_PROVIDER", "dashscope").lower() == "local" else "0.4"))
+log = logging.getLogger(__name__)
 # 重排序分数阈值（0~1）：低于此值视为不相关。该值根据 docs/eval-report.md 的评测结果确定
 RERANK_THRESHOLD = float(os.getenv("RERANK_THRESHOLD", "0.15"))
 # 每路检索的候选数
@@ -69,23 +73,28 @@ def retrieve(question: str, k: int, document_id=None, kb_ids=None, mode: str | N
         item["bm25_rank"] = rank
     fused = sorted(pool.values(), key=lambda x: -x["rrf"])
 
-    # ---------- 4a. 不重排：按阈值保留 ----------
-    if mode == "hybrid":
-        kept = [
-            x for x in fused
-            if (x["vector_score"] or 0) >= SCORE_THRESHOLD
-            or (x["bm25_rank"] is not None and x["bm25_rank"] <= BM25_KEEP_RANK)
-        ]
-        return [(x["doc"], round(x["rrf"] * 30, 4), _detail(x)) for x in kept[:k]]
+    # ---------- 4b. 重排序（云端失败时退回 hybrid） ----------
+    if mode == "rerank":
+        cands = fused[:RERANK_TOP_N]
+        try:
+            scores = reranker.score(question, [x["doc"].page_content for x in cands])
+        except Exception as e:
+            log.warning("重排失败，退回混合检索：%s", e)
+            mode = "hybrid"
+        else:
+            for x, s in zip(cands, scores):
+                x["rerank_score"] = s
+            cands = [x for x in cands if x["rerank_score"] >= RERANK_THRESHOLD]
+            cands.sort(key=lambda x: -x["rerank_score"])
+            return [(x["doc"], round(x["rerank_score"], 4), _detail(x)) for x in cands[:k]]
 
-    # ---------- 4b. 重排序 ----------
-    cands = fused[:RERANK_TOP_N]
-    scores = reranker.score(question, [x["doc"].page_content for x in cands])
-    for x, s in zip(cands, scores):
-        x["rerank_score"] = s
-    cands = [x for x in cands if x["rerank_score"] >= RERANK_THRESHOLD]
-    cands.sort(key=lambda x: -x["rerank_score"])
-    return [(x["doc"], round(x["rerank_score"], 4), _detail(x)) for x in cands[:k]]
+    # ---------- 4a. 不重排（hybrid）：按阈值保留 ----------
+    kept = [
+        x for x in fused
+        if (x["vector_score"] or 0) >= SCORE_THRESHOLD
+        or (x["bm25_rank"] is not None and x["bm25_rank"] <= BM25_KEEP_RANK)
+    ]
+    return [(x["doc"], round(x["rrf"] * 30, 4), _detail(x)) for x in kept[:k]]
 
 
 def _chunk_id(meta: dict) -> str:
