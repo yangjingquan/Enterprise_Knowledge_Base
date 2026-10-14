@@ -9,3 +9,12 @@ chroma_db/*
 !uploads/.gitkeep
 !chroma_db/.gitkeep
 frontend/public/pdfjs/
+.env.*
+!.env.example
+*.key
+*.pem
+*.crt
+*.csr
+*.tgz
+.DS_Store
+hf_cache/

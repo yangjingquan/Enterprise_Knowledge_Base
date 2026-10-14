@@ -12,6 +12,7 @@ Java 后端负责用户、文档记录和问答历史；本服务只负责 AI �
 """
 import json
 import logging
+import os
 import threading
 
 from fastapi import FastAPI, HTTPException
@@ -100,15 +101,28 @@ def parse(req: ParseReq):
     }
 
 
+import contextlib as _contextlib
+import threading as _threading
+
+# 入库串行锁：INGEST_SERIAL=true（默认）时同一时刻只处理一个文件
+_INGEST_LOCK = (_threading.Lock() if os.getenv("INGEST_SERIAL", "true").lower() in ("1", "true", "yes")
+                else _contextlib.nullcontext())
+
+
 @app.post("/ingest")
 def ingest(req: ParseReq):
-    """解析 → 切分 → 向量化 → 存入 Chroma，返回文本块数量。"""
-    chunks = split_document(req.file_path, req.document_id, req.file_name)
-    ocr_pages = len({c.metadata["page"] for c in chunks if c.metadata.get("ocr")})
-    return {
-        "chunk_count": vectorstore.add_chunks(req.document_id, chunks, req.kb_id),
-        "ocr_pages": ocr_pages,   # 通过 OCR 识别的页数，前端显示“OCR”标记
-    }
+    """解析 → 切分 → 向量化 → 存入 Chroma，返回文本块数量。
+
+    低内存服务器上同时解析多个文件（尤其是 OCR）会让内存叠加，
+    所以这里用一把全局锁让入库串行执行（INGEST_SERIAL=false 可关闭）。
+    """
+    with _INGEST_LOCK:
+        chunks = split_document(req.file_path, req.document_id, req.file_name)
+        ocr_pages = len({c.metadata["page"] for c in chunks if c.metadata.get("ocr")})
+        return {
+            "chunk_count": vectorstore.add_chunks(req.document_id, chunks, req.kb_id),
+            "ocr_pages": ocr_pages,   # 通过 OCR 识别的页数，前端显示“OCR”标记
+        }
 
 
 @app.post("/kb-sync")
@@ -132,6 +146,9 @@ def fetch_url(req: FetchUrlReq):
         return web_fetch.fetch(req.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:   # 兜底：未预料的错误也返回可读原因，而不是 500
+        logging.getLogger(__name__).exception("fetch-url failed: %s", req.url)
+        raise HTTPException(status_code=400, detail=f"网页解析失败（{e.__class__.__name__}）")
 
 
 @app.get("/documents/{document_id}/context")

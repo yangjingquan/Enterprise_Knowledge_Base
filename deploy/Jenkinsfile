@@ -1,0 +1,150 @@
+// ai-kb-deploy：企业 AI 知识库（kb.nexbyte.top）部署流水线
+// 底线：只操作 ai-kb 自己的资源（/opt/ai-kb、compose 项目 ai-kb、kb.conf），不碰 shop/erp/workbench/www/jenkins
+pipeline {
+  agent any
+  options {
+    disableConcurrentBuilds()
+    timeout(time: 60, unit: 'MINUTES')
+    buildDiscarder(logRotator(numToKeepStr: '20'))
+  }
+  parameters {
+    string(name: 'BRANCH', defaultValue: 'main', description: '部署的 Git 分支')
+  }
+  environment {
+    // 服务器直连 GitHub 不稳定，按顺序尝试加速镜像
+    REPO_PATH  = 'https://github.com/yangjingquan/Enterprise_Knowledge_Base.git'
+    DEPLOY_DIR = '/opt/ai-kb'
+    PROJECT    = 'ai-kb'
+    // 在宿主机上执行 compose 的一次性容器（复用宿主机 docker CLI 和 compose 插件）
+    RUNNER = 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker:ro -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro -v /opt/ai-kb:/opt/ai-kb -w /opt/ai-kb/app python:3.12-slim'
+  }
+  stages {
+    stage('Validate') {
+      steps {
+        script {
+          if (!(params.BRANCH ==~ /^[A-Za-z0-9._\/-]+$/) || params.BRANCH.contains('..')) { error "非法分支名：${params.BRANCH}" }
+        }
+      }
+    }
+    stage('Checkout') {
+      steps {
+        sh '''
+          set -eux
+          find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+          ok=0
+          for p in https://ghfast.top/ https://ghproxy.net/ ""; do
+            find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            if timeout 180 git clone --depth 1 --single-branch --branch "$BRANCH" "${p}${REPO_PATH}" .; then ok=1; break; fi
+          done
+          [ "$ok" = 1 ]
+          git rev-parse --short HEAD
+          test -f docker-compose.prod.yml
+        '''
+      }
+    }
+    stage('Preflight') {
+      steps {
+        sh '''
+          set -eux
+          docker network inspect shop_shop-net >/dev/null
+          docker inspect -f '{{.State.Running}}' shop-mysql | grep -qx true
+          docker run --rm -v /opt/ai-kb:/d:ro -v /etc/shop/tls:/t:ro alpine:3.20 sh -c 'test -s /d/.env && test -s /t/kb.nexbyte.top.pem && test -s /t/kb.nexbyte.top.key'
+          free -m || true
+        '''
+      }
+    }
+    stage('Sync To /opt/ai-kb/app') {
+      steps {
+        sh '''
+          set -eux
+          HOST_WS=$(printenv WORKSPACE | sed 's#^/var/jenkins_home#/opt/jenkins/jenkins_home#')
+          docker run --rm -v "$HOST_WS":/src:ro -v /opt/ai-kb:/target alpine:3.20 sh -euc '
+            rm -rf /target/app.new && mkdir -p /target/app.new
+            cp -a /src/. /target/app.new/ && rm -rf /target/app.new/.git
+            rm -rf /target/app.old; if [ -d /target/app ]; then mv /target/app /target/app.old; fi
+            mv /target/app.new /target/app && rm -rf /target/app.old
+            mkdir -p /target/deploy/nginx && cp /target/app/deploy/nginx/*.conf /target/deploy/nginx/'
+        '''
+      }
+    }
+    stage('Build (one by one)') {
+      steps {
+        sh '''
+          set -eux
+          for svc in backend-java frontend backend-python; do
+            $RUNNER docker compose -p "$PROJECT" -f docker-compose.prod.yml build "$svc"
+          done
+        '''
+      }
+    }
+    stage('Deploy') {
+      steps {
+        sh '''
+          set -eux
+          $RUNNER docker compose -p "$PROJECT" -f docker-compose.prod.yml up -d
+          $RUNNER docker compose -p "$PROJECT" -f docker-compose.prod.yml ps
+        '''
+      }
+    }
+    stage('Ensure Nginx (kb only)') {
+      steps {
+        sh '''
+          set -eux
+          # 443：shop-nginx 的 conf.d 是打进镜像的，所以宿主机 /opt/shop/nginx/conf.d 保留一份（ai-shop 重建时会带上），运行中的容器用 docker cp 同步
+          SRC=/opt/shop/nginx/conf.d/kb.conf
+          NEW=$(mktemp)
+          docker run --rm -v /opt/ai-kb:/d:ro alpine:3.20 cat /d/deploy/nginx/kb.conf > "$NEW"
+          if ! cmp -s "$NEW" "$SRC"; then cp "$NEW" "$SRC"; fi
+          if ! docker exec shop-nginx cat /etc/nginx/conf.d/kb.conf 2>/dev/null | cmp -s - "$SRC"; then
+            docker cp "$SRC" shop-nginx:/etc/nginx/conf.d/kb.conf
+            if docker exec shop-nginx nginx -t; then
+              docker exec shop-nginx nginx -s reload
+            else
+              docker exec shop-nginx rm -f /etc/nginx/conf.d/kb.conf
+              rm -f "$SRC"
+              docker exec shop-nginx nginx -t
+              error_msg="shop-nginx 配置检查失败，已移除 kb.conf"; echo "$error_msg"; exit 1
+            fi
+          fi
+          rm -f "$NEW"
+          # 80：jenkins-proxy 的 conf.d 是宿主机挂载目录，用一次性容器写入和检查，通过后发 HUP 平滑重载
+          CHANGED=$(docker run --rm -v /opt/ai-kb:/d:ro -v /opt/jenkins/nginx/conf.d:/c alpine:3.20 sh -c 'if cmp -s /d/deploy/nginx/kb-http.conf /c/kb.conf; then echo no; else cp /d/deploy/nginx/kb-http.conf /c/kb.conf; echo yes; fi')
+          if [ "$CHANGED" = yes ]; then
+            if docker run --rm --network jenkins_default --add-host host.docker.internal:host-gateway \
+                 -v /opt/jenkins/nginx/nginx.conf:/etc/nginx/nginx.conf:ro -v /opt/jenkins/nginx/conf.d:/etc/nginx/conf.d:ro \
+                 nginx:1.27-alpine nginx -t; then
+              docker kill -s HUP ai-shop-jenkins-proxy
+            else
+              docker run --rm -v /opt/jenkins/nginx/conf.d:/c alpine:3.20 rm -f /c/kb.conf
+              echo "jenkins-proxy 配置检查失败，已移除 kb.conf"; exit 1
+            fi
+          fi
+        '''
+      }
+    }
+    stage('Verify') {
+      steps {
+        sh '''
+          set -eux
+          for i in $(seq 1 40); do
+            s=$(docker inspect -f '{{.State.Health.Status}}' ai-kb-backend-python || true)
+            [ "$s" = healthy ] && break; sleep 5
+          done
+          [ "$s" = healthy ]
+          for i in $(seq 1 40); do
+            code=$(docker exec shop-nginx wget -S -qO /dev/null --no-check-certificate --header='Host: kb.nexbyte.top' https://127.0.0.1/api/auth/ping 2>&1 | awk '/HTTP\\//{print $2}' | tail -1 || true)
+            docker logs ai-kb-backend-java 2>&1 | grep -q 'Started KbApplication' && break; sleep 5
+          done
+          docker logs ai-kb-backend-java 2>&1 | grep -q 'Started KbApplication'
+          docker exec shop-nginx wget -qO /dev/null --no-check-certificate --header='Host: kb.nexbyte.top' https://127.0.0.1/
+          docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' ai-kb-backend-python ai-kb-backend-java ai-kb-frontend
+        '''
+      }
+    }
+  }
+  post {
+    failure {
+      sh 'docker logs --tail=80 ai-kb-backend-java 2>&1 || true; docker logs --tail=80 ai-kb-backend-python 2>&1 || true'
+    }
+  }
+}

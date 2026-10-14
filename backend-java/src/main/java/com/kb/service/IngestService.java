@@ -113,6 +113,12 @@ public class IngestService {
                 // 不是 JSON 就用原文
             }
             throw new IllegalArgumentException(reason);
+        } catch (org.springframework.web.client.HttpServerErrorException e) {
+            log.warn("fetch-url 5xx: {}", e.getMessage());
+            throw new IllegalArgumentException("网页解析服务出错，请稍后重试");
+        } catch (org.springframework.web.client.ResourceAccessException e) {
+            log.warn("fetch-url unreachable: {}", e.getMessage());
+            throw new IllegalArgumentException("网页下载超时或解析服务暂不可用，请稍后重试");
         }
     }
 
