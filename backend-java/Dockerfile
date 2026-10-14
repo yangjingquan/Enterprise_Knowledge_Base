@@ -1,4 +1,5 @@
-FROM maven:3.9-eclipse-temurin-21 AS build
+# 服务器已缓存 JDK 17 镜像，且 Docker Hub 拉取 JDK 21 镜像不稳定，因此统一使用 JDK 17（Spring Boot 3.2 支持）
+FROM maven:3.9-eclipse-temurin-17 AS build
 WORKDIR /src
 # 限制构建时 Maven 内存，避免在小内存服务器上构建挤占其他服务
 ENV MAVEN_OPTS="-Xmx384m -XX:+UseSerialGC"
@@ -8,7 +9,7 @@ COPY pom.xml .
 RUN mvn -B dependency:go-offline
 COPY src ./src
 RUN mvn -B -DskipTests package
-FROM eclipse-temurin:21-jre
+FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /src/target/kb-backend-0.1.0.jar app.jar
 EXPOSE 8080
