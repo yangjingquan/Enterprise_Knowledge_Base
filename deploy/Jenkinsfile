@@ -11,7 +11,8 @@ pipeline {
     string(name: 'BRANCH', defaultValue: 'main', description: '部署的 Git 分支')
   }
   environment {
-    REPO_URL   = 'https://ghproxy.net/https://github.com/yangjingquan/Enterprise_Knowledge_Base.git'
+    // 服务器直连 GitHub 不稳定，按顺序尝试加速镜像
+    REPO_PATH  = 'https://github.com/yangjingquan/Enterprise_Knowledge_Base.git'
     DEPLOY_DIR = '/opt/ai-kb'
     PROJECT    = 'ai-kb'
     // 在宿主机上执行 compose 的一次性容器（复用宿主机 docker CLI 和 compose 插件）
@@ -30,7 +31,12 @@ pipeline {
         sh '''
           set -eux
           find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
-          timeout 300 git clone --depth 1 --single-branch --branch "$BRANCH" "$REPO_URL" .
+          ok=0
+          for p in https://ghfast.top/ https://ghproxy.net/ ""; do
+            find . -mindepth 1 -maxdepth 1 -exec rm -rf -- {} +
+            if timeout 180 git clone --depth 1 --single-branch --branch "$BRANCH" "${p}${REPO_PATH}" .; then ok=1; break; fi
+          done
+          [ "$ok" = 1 ]
           git rev-parse --short HEAD
           test -f docker-compose.prod.yml
         '''
