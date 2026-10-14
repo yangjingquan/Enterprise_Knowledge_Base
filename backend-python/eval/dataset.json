@@ -1,0 +1,1003 @@
+[
+ {
+  "id": "Q01",
+  "category": "事实",
+  "question": "工作满10年有几天年假？",
+  "keywords": [
+   [
+    "12天",
+    "12 天"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": 7
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q02",
+  "category": "事实",
+  "question": "试用期工资不低于转正后工资的多少？",
+  "keywords": [
+   [
+    "80%"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q03",
+  "category": "事实",
+  "question": "综合得分多少分及以上可以转正？",
+  "keywords": [
+   [
+    "75"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q04",
+  "category": "事实",
+  "question": "连续旷工几天公司可以解除劳动合同？",
+  "keywords": [
+   [
+    "3天",
+    "3 天",
+    "三天"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q05",
+  "category": "事实",
+  "question": "法定节假日加班按工资的多少支付加班费？",
+  "keywords": [
+   [
+    "300%"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q06",
+  "category": "事实",
+  "question": "婚假有多少天？",
+  "keywords": [
+   [
+    "13天",
+    "13 天"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q07",
+  "category": "事实",
+  "question": "每年享有几天全薪病假？",
+  "keywords": [
+   [
+    "5天",
+    "5 天",
+    "五天"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q08",
+  "category": "事实",
+  "question": "公司每月几号发工资？",
+  "keywords": [
+   [
+    "15日",
+    "15号"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q09",
+  "category": "事实",
+  "question": "餐费补贴标准是多少？",
+  "keywords": [
+   [
+    "30元"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q10",
+  "category": "事实",
+  "question": "年度绩效为S级的调薪幅度是多少？",
+  "keywords": [
+   [
+    "10%"
+   ],
+   [
+    "15%"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q11",
+  "category": "事实",
+  "question": "请假超过10天由谁审批？",
+  "keywords": [
+   [
+    "分管副总经理"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q12",
+  "category": "事实",
+  "question": "迟到20分钟怎么处理？",
+  "keywords": [
+   [
+    "50元"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q13",
+  "category": "事实",
+  "question": "弹性工作制最晚几点上班？",
+  "keywords": [
+   [
+    "9:30"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q14",
+  "category": "事实",
+  "question": "调休需要在多长时间内用完？",
+  "keywords": [
+   [
+    "六个月",
+    "6个月"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q15",
+  "category": "PPT",
+  "question": "新员工入职第一天要办理哪些事？",
+  "keywords": [
+   [
+    "工牌"
+   ],
+   [
+    "企业微信",
+    "OA"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 5
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q16",
+  "category": "PPT",
+  "question": "入职培训考试多少分及格？",
+  "keywords": [
+   [
+    "80"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 2
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q17",
+  "category": "PPT",
+  "question": "信息安全培训的讲师是谁？",
+  "keywords": [
+   [
+    "周健"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 2
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q18",
+  "category": "PPT",
+  "question": "发现疑似钓鱼邮件应该转发到哪个邮箱？",
+  "keywords": [
+   [
+    "security@xingchen-zz.com"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 10
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q19",
+  "category": "PPT",
+  "question": "工牌遗失补办收费多少？",
+  "keywords": [
+   [
+    "50元"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 5
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q20",
+  "category": "PPT",
+  "question": "安全事故报告的分机号是多少？",
+  "keywords": [
+   [
+    "6119"
+   ]
+  ],
+  "source": {
+   "file": "新员工入职培训.pptx",
+   "page": 12
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q21",
+  "category": "事实",
+  "question": "C类员工去上海出差，每晚住宿上限是多少？",
+  "keywords": [
+   [
+    "500"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": 6
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q22",
+  "category": "事实",
+  "question": "加班到几点以后可以报销打车费，上限多少？",
+  "keywords": [
+   [
+    "22:00",
+    "22点"
+   ],
+   [
+    "150"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q23",
+  "category": "事实",
+  "question": "报销3万元需要谁审批？",
+  "keywords": [
+   [
+    "分管副总经理"
+   ],
+   [
+    "财务经理"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q24",
+  "category": "事实",
+  "question": "自驾出差每公里补贴多少钱？",
+  "keywords": [
+   [
+    "1.2元"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q25",
+  "category": "事实",
+  "question": "国内一线城市每天伙食补助多少？",
+  "keywords": [
+   [
+    "120"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q26",
+  "category": "事实",
+  "question": "差旅费应在出差结束后多少个工作日内报销？",
+  "keywords": [
+   [
+    "15个工作日",
+    "15 个工作日"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q27",
+  "category": "事实",
+  "question": "给客户的礼品单件价值不得超过多少？",
+  "keywords": [
+   [
+    "500元"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q28",
+  "category": "事实",
+  "question": "预计出差费用超过多少元可以申请借款？",
+  "keywords": [
+   [
+    "3000"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q29",
+  "category": "事实",
+  "question": "国际出差的境外保险保额不低于多少？",
+  "keywords": [
+   [
+    "100万"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q30",
+  "category": "事实",
+  "question": "招待客户高层的人均标准是多少？",
+  "keywords": [
+   [
+    "500元"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q31",
+  "category": "编号",
+  "question": "出现E-03故障代码应该如何处理？",
+  "keywords": [
+   [
+    "停止主轴"
+   ],
+   [
+    "30℃",
+    "30°C",
+    "30 ℃"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 6
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q32",
+  "category": "编号",
+  "question": "E-08报警怎么处理？",
+  "keywords": [
+   [
+    "断电",
+    "5分钟",
+    "5 分钟"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 6
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q33",
+  "category": "编号",
+  "question": "E-04换刀失败的可能原因有哪些？",
+  "keywords": [
+   [
+    "刀套"
+   ],
+   [
+    "气压"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 6
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q34",
+  "category": "编号",
+  "question": "导轨润滑油滤芯的型号是什么？",
+  "keywords": [
+   [
+    "LF-10"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 4
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q35",
+  "category": "编号",
+  "question": "运行8200小时的设备需要更换什么部件？",
+  "keywords": [
+   [
+    "主轴轴承"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 4
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q36",
+  "category": "编号",
+  "question": "丝杠反向间隙超差时在哪个系统参数中补偿？",
+  "keywords": [
+   [
+    "1851"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 5
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q37",
+  "category": "编号",
+  "question": "厂内急救电话是多少？",
+  "keywords": [
+   [
+    "8120"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 7
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q38",
+  "category": "事实",
+  "question": "主轴轴承的更换周期是多久？",
+  "keywords": [
+   [
+    "8000"
+   ],
+   [
+    "2年",
+    "2 年",
+    "两年"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 4
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q39",
+  "category": "事实",
+  "question": "冷却液浓度标准是多少？",
+  "keywords": [
+   [
+    "4%"
+   ],
+   [
+    "6%"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 4
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q40",
+  "category": "事实",
+  "question": "SK-850B主轴最高转速是多少？",
+  "keywords": [
+   [
+    "12000"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q41",
+  "category": "事实",
+  "question": "冬季暖机时间是多少分钟？",
+  "keywords": [
+   [
+    "20分钟",
+    "20 分钟"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 3
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q42",
+  "category": "Excel",
+  "question": "LF-10滤芯多少钱一个，现在库存多少？",
+  "keywords": [
+   [
+    "85"
+   ],
+   [
+    "36"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q43",
+  "category": "Excel",
+  "question": "SP-HX-001主轴轴承的含税单价是多少？",
+  "keywords": [
+   [
+    "12800"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q44",
+  "category": "Excel",
+  "question": "A06B-6114-K504编码器电池存放在哪个库位？",
+  "keywords": [
+   [
+    "D-01-01"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q45",
+  "category": "Excel",
+  "question": "采购一批6万元的备件需要谁审批？",
+  "keywords": [
+   [
+    "分管副总经理"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 3
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q46",
+  "category": "Excel",
+  "question": "苏州润通液压的联系人是谁？",
+  "keywords": [
+   [
+    "陈佳"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 2
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q47",
+  "category": "Excel",
+  "question": "价值多少元以上的备件须以旧换新？",
+  "keywords": [
+   [
+    "2000"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 3
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q48",
+  "category": "OCR",
+  "question": "SK850-03在9月18日点检发现了哪些异常？",
+  "keywords": [
+   [
+    "导轨"
+   ],
+   [
+    "排屑器"
+   ]
+  ],
+  "source": {
+   "file": "设备点检记录表（扫描件）.pdf",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q49",
+  "category": "OCR",
+  "question": "排屑器异响的报修工单号是多少？",
+  "keywords": [
+   [
+    "WX-20260918-07"
+   ]
+  ],
+  "source": {
+   "file": "设备点检记录表（扫描件）.pdf",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q50",
+  "category": "OCR",
+  "question": "9月18日的点检人是谁？",
+  "keywords": [
+   [
+    "张伟"
+   ]
+  ],
+  "source": {
+   "file": "设备点检记录表（扫描件）.pdf",
+   "page": 1
+  },
+  "history": [],
+  "negative": false
+ },
+ {
+  "id": "Q51",
+  "category": "多轮",
+  "question": "那满20年呢？",
+  "keywords": [
+   [
+    "17天",
+    "17 天"
+   ]
+  ],
+  "source": {
+   "file": "员工手册.pdf",
+   "page": 7
+  },
+  "history": [
+   {
+    "question": "工作满10年有几天年假？",
+    "answer": "满10年不满20年的员工年假合计12天（法定10天+福利2天）。"
+   }
+  ],
+  "negative": false
+ },
+ {
+  "id": "Q52",
+  "category": "多轮",
+  "question": "那去成都呢？",
+  "keywords": [
+   [
+    "400"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": 6
+  },
+  "history": [
+   {
+    "question": "C类员工去上海出差，每晚住宿上限是多少？",
+    "answer": "C类员工在一线城市住宿上限为每晚500元。"
+   }
+  ],
+  "negative": false
+ },
+ {
+  "id": "Q53",
+  "category": "多轮",
+  "question": "他们的联系电话是多少？",
+  "keywords": [
+   [
+    "021-58830216"
+   ]
+  ],
+  "source": {
+   "file": "2026年设备备件价格与库存表.xlsx",
+   "page": 2
+  },
+  "history": [
+   {
+    "question": "主轴轴承（前）的供应商是谁？",
+    "answer": "主轴轴承（前）的供应商是上海恒锐轴承。"
+   }
+  ],
+  "negative": false
+ },
+ {
+  "id": "Q54",
+  "category": "多轮",
+  "question": "那E-02呢？",
+  "keywords": [
+   [
+    "空压机",
+    "三联件",
+    "漏点"
+   ]
+  ],
+  "source": {
+   "file": "SK-850维护手册.pdf",
+   "page": 6
+  },
+  "history": [
+   {
+    "question": "E-01报警怎么处理？",
+    "answer": "E-01为润滑油压力低报警：补充润滑油、更换滤芯、检查油管接头。"
+   }
+  ],
+  "negative": false
+ },
+ {
+  "id": "Q55",
+  "category": "多轮",
+  "question": "B类呢？",
+  "keywords": [
+   [
+    "200"
+   ]
+  ],
+  "source": {
+   "file": "差旅与费用报销管理制度.pdf",
+   "page": null
+  },
+  "history": [
+   {
+    "question": "C类员工市内打车每天报销上限是多少？",
+    "answer": "C类及D类员工每天市内交通报销上限为100元。"
+   }
+  ],
+  "negative": false
+ },
+ {
+  "id": "Q56",
+  "category": "拒答",
+  "question": "今天上海天气怎么样？",
+  "keywords": [],
+  "source": null,
+  "history": [],
+  "negative": true
+ },
+ {
+  "id": "Q57",
+  "category": "拒答",
+  "question": "公司的股票代码是多少？",
+  "keywords": [],
+  "source": null,
+  "history": [],
+  "negative": true
+ },
+ {
+  "id": "Q58",
+  "category": "拒答",
+  "question": "HX-630的主轴最高转速是多少？",
+  "keywords": [],
+  "source": null,
+  "history": [],
+  "negative": true
+ },
+ {
+  "id": "Q59",
+  "category": "拒答",
+  "question": "如何申请出国留学的公费资助？",
+  "keywords": [],
+  "source": null,
+  "history": [],
+  "negative": true
+ },
+ {
+  "id": "Q60",
+  "category": "拒答",
+  "question": "Python怎么读取Excel文件？",
+  "keywords": [],
+  "source": null,
+  "history": [],
+  "negative": true
+ }
+]

@@ -1,0 +1,73 @@
+services:
+  mysql:
+    image: mysql:8.0
+    ports:
+      - "3307:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: root123
+      MYSQL_DATABASE: kb
+      MYSQL_USER: kb
+      MYSQL_PASSWORD: kb123
+      TZ: Asia/Shanghai
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ./sql/init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot123"]
+      interval: 5s
+      retries: 20
+
+  backend-python:
+    build: ./backend-python
+    restart: unless-stopped
+    environment:
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?请在 .env 中设置 DEEPSEEK_API_KEY}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+      HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
+      CHROMA_DIR: /data/chroma_db
+      UPLOAD_DIR: /data/uploads   # 网页导入时 HTML 保存到这里（与 Java 共享）
+      # 重排序：默认开启（bge-reranker-v2-m3，首次启动自动下载约 2.2GB，运行时约占 2.3GB 内存）。
+      # 内存不足 6GB 的机器可在 .env 中设置 RERANK_ENABLED=false，自动退回“向量 + BM25”混合检索
+      RERANK_ENABLED: ${RERANK_ENABLED:-true}
+      RERANK_MODEL: ${RERANK_MODEL:-BAAI/bge-reranker-v2-m3}
+      RERANK_TOP_N: ${RERANK_TOP_N:-15}
+      RERANK_THRESHOLD: ${RERANK_THRESHOLD:-0.15}
+      # 扫描件 OCR（RapidOCR，模型随安装包自带）
+      OCR_ENABLED: ${OCR_ENABLED:-true}
+      EVAL_REPORT: /data/chroma_db/eval-report.md
+    volumes:
+      - ./chroma_db:/data/chroma_db
+      - ./uploads:/data/uploads
+      - hf_cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 10s
+      start_period: 600s   # 首次启动需下载 bge-m3（约 2.2GB）
+      retries: 60
+
+  backend-java:
+    build: ./backend-java
+    restart: unless-stopped
+    environment:
+      DB_HOST: mysql
+      RAG_URL: http://backend-python:8000
+      UPLOAD_DIR: /data/uploads
+      JWT_SECRET: ${JWT_SECRET:-please-change-this-to-a-long-random-secret-0123456789}
+      # 是否创建演示知识库和部门账号（hr01 / fin01 / eng01），生产环境请设为 false
+      KB_DEMO_SEED: ${KB_DEMO_SEED:-true}
+    volumes:
+      - ./uploads:/data/uploads
+    depends_on:
+      mysql: { condition: service_healthy }
+      backend-python: { condition: service_healthy }
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "5173:80"
+    depends_on: [backend-java]
+
+volumes:
+  mysql_data:
+  hf_cache:

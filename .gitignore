@@ -1,0 +1,11 @@
+.env
+node_modules/
+dist/
+target/
+.venv/
+__pycache__/
+uploads/*
+chroma_db/*
+!uploads/.gitkeep
+!chroma_db/.gitkeep
+frontend/public/pdfjs/
