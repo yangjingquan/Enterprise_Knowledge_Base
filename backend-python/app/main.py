@@ -23,11 +23,14 @@ from pydantic import BaseModel
 
 from . import bm25, embeddings, rag, reindex, reranker, retrieval, vectorstore, web_fetch
 from .document_loader import split_document
+from .datasets.api import router as datasets_router
+from .datasets import mixed, nl2sql, router
 
 app = FastAPI(title="KB RAG Service")
 log = logging.getLogger("uvicorn.error")
 
 # 允许跨域（本服务只在 Docker 内网被 Java 调用，这里放开便于本地调试）
+app.include_router(datasets_router)   # 结构化数据集（问数）
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 
@@ -45,6 +48,7 @@ class HistoryItem(BaseModel):
     """一轮历史对话"""
     question: str = ""
     answer: str = ""
+    sql: str | None = None     # 数据分析轮次的 SQL（用于"再按地区拆一下"之类的追问）
 
 
 class AskReq(BaseModel):
@@ -54,6 +58,10 @@ class AskReq(BaseModel):
     history: list[HistoryItem] = []  # 最近几轮对话，用于多轮追问
     # 用户有权限的知识库 ID 列表，由 Java 端根据登录用户计算后传入；None 表示不限制（仅内部调试）
     kb_ids: list[int] | None = None
+    # 问数：auto 自动判断 / doc 文档问答 / data 数据分析；datasets 为 Java 按权限查好的数据集元数据
+    mode: str = "auto"
+    datasets: list[dict] = []
+    dataset_ids: list[int] | None = None
 
 
 class KbSyncReq(BaseModel):
@@ -246,10 +254,42 @@ def admin_reindex_status():
     return reindex.STATUS
 
 
+def _events(req: "AskReq", mode: str, history: list):
+    if mode == "data":
+        return nl2sql.analyze(req.question, req.datasets, req.dataset_ids, history)
+    if mode == "mixed":
+        return mixed.answer_stream(req.question, req.datasets, req.dataset_ids, history, req.document_id, req.kb_ids)
+    return rag.answer_stream(req.question, req.document_id, history, kb_ids=req.kb_ids)
+
+
+def _route(req: "AskReq") -> str:
+    if req.document_id:
+        return "doc"
+    mode = router.route(req.question, req.datasets, req.mode)
+    return "doc" if mode in ("data", "mixed") and not req.datasets else mode
+
+
 @app.post("/ask")
 def ask(req: AskReq):
-    """普通问答：返回 {"answer": "...", "sources": [...]}。"""
-    return rag.answer(req.question, req.document_id, [h.model_dump() for h in req.history], kb_ids=req.kb_ids)
+    """普通问答：返回 {"answer": "...", "sources": [...], "mode": "doc|data|mixed", "analysis": {...}}。"""
+    history = [h.model_dump() for h in req.history]
+    mode = _route(req)
+    if mode == "doc":
+        out = rag.answer(req.question, req.document_id, history, kb_ids=req.kb_ids)
+        out["mode"] = "doc"
+        return out
+    answer, analysis, sources, rewritten = [], {}, [], req.question
+    for ev in _events(req, mode, history):
+        if ev["type"] in ("delta", "error"):
+            answer.append(ev["data"])
+        elif ev["type"] in ("sql", "table", "chart"):
+            analysis[ev["type"]] = ev["data"]
+        elif ev["type"] == "sources":
+            sources = ev["data"]
+        elif ev["type"] == "rewrite":
+            rewritten = ev["data"]
+    return {"answer": "".join(answer), "sources": sources, "mode": mode, "analysis": analysis,
+            "rewritten_question": rewritten}
 
 
 @app.post("/ask/stream")
@@ -261,7 +301,9 @@ def ask_stream(req: AskReq):
     def gen():
         try:
             history = [h.model_dump() for h in req.history]
-            for event in rag.answer_stream(req.question, req.document_id, history, kb_ids=req.kb_ids):
+            mode = _route(req)
+            yield f"data: {json.dumps({'type': 'route', 'data': mode})}\n\n"
+            for event in _events(req, mode, history):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             # 出错也通过事件通知前端，而不是直接断开连接

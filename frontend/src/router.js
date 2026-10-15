@@ -2,6 +2,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import Login from './views/Login.vue'
 import Layout from './views/Layout.vue'
 import Documents from './views/Documents.vue'
+import Datasets from './views/Datasets.vue'
 import Chat from './views/Chat.vue'
 import History from './views/History.vue'
 import KbManage from './views/KbManage.vue'
@@ -20,6 +21,7 @@ const router = createRouter({
       children: [
         { path: 'chat', component: Chat, meta: { title: '智能问答', icon: 'ChatDotRound' } },
         { path: 'documents', component: Documents, meta: { title: '文档管理', icon: 'Document' } },
+        { path: 'datasets', component: Datasets, meta: { title: '数据集', icon: 'Grid' } },
         { path: 'history', component: History, meta: { title: '问答历史', icon: 'Clock' } },
         { path: 'kbs', component: KbManage, meta: { admin: true, title: '知识库管理', icon: 'Collection', group: '系统管理' } },
         { path: 'users', component: Users, meta: { admin: true, title: '用户管理', icon: 'User', group: '系统管理' } },

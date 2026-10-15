@@ -17,14 +17,17 @@ services:
     image: ai-kb-backend-python:latest
     container_name: ai-kb-backend-python
     restart: unless-stopped
-    mem_limit: 768m
-    memswap_limit: 1g
+    mem_limit: 1g
+    memswap_limit: 1280m
     env_file: /opt/ai-kb/.env
     environment:
       EMBEDDING_PROVIDER: dashscope
       RERANK_PROVIDER: dashscope
       CHROMA_DIR: /data/chroma_db
       UPLOAD_DIR: /data/uploads
+      DATASET_DIR: /data/datasets
+      DUCKDB_MEMORY_LIMIT: 256MB
+      DUCKDB_THREADS: "2"
       OCR_ENABLED: "true"
       OCR_MAX_SIDE: "1600"
       OCR_DPI: "150"
@@ -35,6 +38,7 @@ services:
     volumes:
       - ai-kb-chroma:/data/chroma_db
       - ai-kb-uploads:/data/uploads
+      - ai-kb-datasets:/data/datasets
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 15s
@@ -90,3 +94,5 @@ volumes:
     name: ai-kb-chroma
   ai-kb-uploads:
     name: ai-kb-uploads
+  ai-kb-datasets:
+    name: ai-kb-datasets

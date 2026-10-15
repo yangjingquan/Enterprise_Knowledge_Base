@@ -43,6 +43,7 @@ services:
       HF_ENDPOINT: ${HF_ENDPOINT:-https://hf-mirror.com}
       CHROMA_DIR: /data/chroma_db
       UPLOAD_DIR: /data/uploads   # 网页导入时 HTML 保存到这里（与 Java 共享）
+      DATASET_DIR: /data/datasets # 数据集（问数）的 DuckDB 文件
       # 重排序：dashscope（百炼 gte-rerank-v2，默认）/ local（本地 bge-reranker-v2-m3，约 2.3GB 内存）/ none
       RERANK_PROVIDER: ${RERANK_PROVIDER:-dashscope}
       DASHSCOPE_RERANK_MODEL: ${DASHSCOPE_RERANK_MODEL:-gte-rerank-v2}
@@ -55,6 +56,7 @@ services:
     volumes:
       - ./chroma_db:/data/chroma_db
       - ./uploads:/data/uploads
+      - ./datasets_data:/data/datasets
       - hf_cache:/root/.cache/huggingface
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request;urllib.request.urlopen('http://localhost:8000/health')"]

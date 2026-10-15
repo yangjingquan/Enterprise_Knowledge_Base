@@ -34,6 +34,7 @@
               <div v-if="row.rewrittenQuestion" class="meta"><el-icon><Connection /></el-icon>多轮改写：{{ row.rewrittenQuestion }}</div>
               <el-alert v-if="row.feedbackComment" :title="`点踩原因：${row.feedbackComment}`" type="error" :closable="false" show-icon class="reason" />
               <div class="markdown answer" v-html="md(row.answer)" />
+              <DataAnswer v-if="analysis(row)" :a="analysis(row)" :mode="row.mode" :history-id="row.id" :switchable="false" />
               <div v-if="sources(row).length" class="refs">
                 <span class="ref-label">引用</span>
                 <el-tag v-for="s in sources(row)" :key="s.index" effect="plain" class="ref">[{{ s.index }}] {{ s.file_name }} · {{ loc(s) }}</el-tag>
@@ -59,6 +60,9 @@
               {{ sessionCount(row.sessionId) }} 轮
             </el-button>
           </template>
+        </el-table-column>
+        <el-table-column label="类型" width="90">
+          <template #default="{ row }"><el-tag size="small" effect="plain" :type="MODE[row.mode || 'doc'][1]">{{ MODE[row.mode || 'doc'][0] }}</el-tag></template>
         </el-table-column>
         <el-table-column label="来源" width="70" align="center">
           <template #default="{ row }">{{ sources(row).length }}</template>
@@ -91,6 +95,7 @@ import { ref, computed, onMounted } from 'vue'
 import { md } from '../markdown'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
+import DataAnswer from '../components/DataAnswer.vue'
 import api from '../api'
 import { isAdmin } from '../kb'
 
@@ -108,6 +113,23 @@ const allRows = ref([])     // 未筛选的数据，用于统计每个会话的�
 const keyword = ref('')
 const shown = computed(() => list.value.filter(r => !keyword.value || (r.question || '').includes(keyword.value)))
 const satisfaction = computed(() => Math.round(stats.value.up * 100 / (stats.value.up + stats.value.down)))
+
+const MODE = { doc: ['文档', 'info'], data: ['数据', 'success'], mixed: ['混合', 'warning'] }
+/** analysis 字段是 JSON 字符串：{sql: {sql, assumptions, dataset, tables, alternatives}, table, chart}，展开成 DataAnswer 需要的结构 */
+const parsed = new Map()
+function analysis(row) {
+  if (!row.analysis) return null
+  if (!parsed.has(row.id)) {
+    let a = null
+    try {
+      const raw = JSON.parse(row.analysis)
+      a = { ...(raw.sql || {}), table: raw.table, chart: raw.chart }
+      a.alternatives = []   // 历史回看不提供切换
+    } catch { /* 忽略损坏数据 */ }
+    parsed.set(row.id, a)
+  }
+  return parsed.get(row.id)
+}
 
 /** sources 字段是 JSON 字符串，解析失败时返回空数组 */
 function sources(row) {

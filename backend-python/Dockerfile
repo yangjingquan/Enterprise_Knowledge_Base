@@ -2,7 +2,9 @@ FROM python:3.11-slim
 WORKDIR /app
 # pip 镜像可通过构建参数切换（服务器上清华源更快）
 ARG PIP_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
-ENV PIP_INDEX_URL=${PIP_INDEX_URL} PIP_DEFAULT_TIMEOUT=60 PYTHONUNBUFFERED=1
+# 备用源：主源缺包时（如清华源暂未同步 duckdb）从阿里云补齐
+ARG PIP_EXTRA_INDEX_URL=https://mirrors.aliyun.com/pypi/simple/
+ENV PIP_INDEX_URL=${PIP_INDEX_URL} PIP_EXTRA_INDEX_URL=${PIP_EXTRA_INDEX_URL} PIP_DEFAULT_TIMEOUT=60 PYTHONUNBUFFERED=1
 # 是否安装本地模型依赖（torch + sentence-transformers，镜像增加约 1.5GB）。
 # 默认 false：使用阿里云百炼云端向量/重排，适合 4GB 内存服务器；需要本地 bge-m3 时构建参数设为 true
 ARG WITH_LOCAL_MODELS=false

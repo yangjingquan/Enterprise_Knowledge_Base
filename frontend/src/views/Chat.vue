@@ -17,6 +17,18 @@
       <el-select v-model="kbId" class="kb-select" placeholder="全部有权限的知识库" clearable @change="docId = null">
         <el-option v-for="k in kbs" :key="k.id" :label="k.name" :value="k.id" />
       </el-select>
+      <div class="sec-title"><el-icon><Grid /></el-icon>问答方式</div>
+      <!-- 自动：由系统判断问文档还是问数据；指定文档时只做文档问答 -->
+      <el-radio-group v-model="mode" size="small" class="mode-sw" :disabled="!!docId">
+        <el-radio-button value="auto">自动</el-radio-button>
+        <el-radio-button value="doc">文档</el-radio-button>
+        <el-radio-button value="data">数据</el-radio-button>
+        <el-radio-button value="mixed">混合</el-radio-button>
+      </el-radio-group>
+      <el-select v-if="mode !== 'doc' && scopedDatasets.length" v-model="datasetIds" multiple collapse-tags size="small"
+                 class="kb-select ds-select" placeholder="全部数据集（可选）" clearable>
+        <el-option v-for="d in scopedDatasets" :key="d.id" :label="d.name" :value="d.id" />
+      </el-select>
       <div class="sec-title"><el-icon><Files /></el-icon>文档范围<span class="cnt">{{ scopedDocs.length }}</span></div>
       <el-scrollbar class="doc-scroll">
         <div :class="['doc', { on: docId === null }]" @click="docId = null">
@@ -68,6 +80,8 @@
                 <div class="ai-card">
                   <div class="markdown" v-html="md(m.text)" />
                   <span v-if="loading && streaming && i === msgs.length - 1" class="caret" />
+                  <DataAnswer v-if="(m.mode === 'data' || m.mode === 'mixed') && m.analysis" :a="m.analysis" :mode="m.mode"
+                              :history-id="m.historyId" :switchable="!loading" @switch="x => switchDataset(i, x)" />
                   <el-alert v-if="m.error" :title="m.error" :type="m.error.includes('已停止') ? 'info' : 'error'" :closable="false" show-icon class="err" />
 
                   <!-- 引用来源卡片：点击打开原文 -->
@@ -145,6 +159,7 @@ import { md } from '../markdown'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 import SourceViewer from '../components/SourceViewer.vue'
+import DataAnswer from '../components/DataAnswer.vue'
 import { newSessionId } from '../textMatch'
 import { fetchMyKbs } from '../kb'
 
@@ -157,6 +172,9 @@ const docs = ref([])
 const kbs = ref([])
 const kbId = ref(null)
 const docId = ref(null)
+const mode = ref('auto')          // auto | doc | data
+const datasets = ref([])
+const datasetIds = ref([])
 const msgs = ref([])
 const q = ref('')
 const loading = ref(false)
@@ -190,6 +208,9 @@ async function copy(t) {
 }
 
 
+const scopedDatasets = computed(() => kbId.value ? datasets.value.filter(d => d.kbId === kbId.value) : datasets.value)
+watch(kbId, () => { datasetIds.value = [] })
+
 /** 选中知识库后，文档列表只显示该知识库的文档 */
 const scopedDocs = computed(() => kbId.value ? docs.value.filter(d => d.kbId === kbId.value) : docs.value)
 
@@ -214,7 +235,9 @@ function buildHistory() {
     const u = msgs.value[i]
     const a = msgs.value[i + 1]
     if (u.role === 'user' && a.role === 'ai' && a.text && !a.error) {
-      out.push({ question: u.text, answer: a.text })
+      const h = { question: u.text, answer: a.text }
+      if (a.analysis?.sql) h.sql = a.analysis.sql   // 问数追问时带上上一轮 SQL
+      out.push(h)
     }
   }
   return out.slice(-MAX_HISTORY_ROUNDS)
@@ -230,7 +253,7 @@ function sourceLocation(s) {
 }
 
 /** 提问：以流式方式读取后端 SSE 事件 */
-async function ask(text) {
+async function ask(text, opts = {}) {
   const question = (text || q.value).trim()
   if (!question || loading.value) return
 
@@ -242,7 +265,7 @@ async function ask(text) {
   streaming.value = false
   scroll()
 
-  const m = reactive({ role: 'ai', text: '', sources: [], rewrite: '', error: '', historyId: null, feedback: null })
+  const m = reactive({ role: 'ai', text: '', sources: [], rewrite: '', error: '', historyId: null, feedback: null, mode: '', analysis: null })
   let added = false
   let finished = false
   const show = () => {
@@ -268,6 +291,8 @@ async function ask(text) {
         documentId: docId.value,
         sessionId: sessionId.value,
         history,
+        mode: docId.value ? 'doc' : (opts.mode || mode.value),
+        datasetIds: opts.datasetIds || (datasetIds.value.length ? datasetIds.value : null),
       }),
     })
     if (res.status === 401) {
@@ -295,6 +320,16 @@ async function ask(text) {
         const ev = JSON.parse(l.slice(6))
         if (ev.type === 'rewrite') {
           m.rewrite = ev.data
+        } else if (ev.type === 'route') {
+          m.mode = ev.data
+        } else if (ev.type === 'sql') {
+          m.analysis = { ...(m.analysis || {}), ...ev.data }
+          show()
+        } else if (ev.type === 'table') {
+          m.analysis = { ...(m.analysis || {}), table: ev.data }
+          scroll()
+        } else if (ev.type === 'chart') {
+          m.analysis = { ...(m.analysis || {}), chart: ev.data }
         } else if (ev.type === 'sources') {
           m.sources = ev.data
         } else if (ev.type === 'delta') {
@@ -322,6 +357,13 @@ async function ask(text) {
     controller = null
     scroll()
   }
+}
+
+/** 多个数据集都可能回答时，用户点"改用 X"：用同一个问题、指定该数据集重新提问 */
+function switchDataset(i, x) {
+  const question = msgs.value[i - 1]?.role === 'user' ? msgs.value[i - 1].text : ''
+  if (!question) return
+  ask(question, { mode: msgs.value[i].mode === 'mixed' ? 'mixed' : 'data', datasetIds: [x.dataset_id] })
 }
 
 /** 停止生成：中断请求 */
@@ -384,7 +426,8 @@ onMounted(async () => {
     // 数据损坏就忽略，开始新对话
   }
   scroll()
-  const [docList, kbList] = await Promise.all([api.get('/documents'), fetchMyKbs()])
+  const [docList, kbList, dsList] = await Promise.all([api.get('/documents'), fetchMyKbs(), api.get('/datasets').catch(() => [])])
+  datasets.value = (dsList || []).filter(d => d.status === 'ready')
   docs.value = docList.filter(d => d.status === 'ready')
   kbs.value = kbList
   docsLoading.value = false
@@ -398,6 +441,10 @@ onMounted(async () => {
 .sec-title { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); margin: 4px 0 8px; }
 .sec-title .cnt { margin-left: auto; font-weight: 500; color: var(--text-3); font-size: 12px; }
 .kb-select { width: 100%; margin-bottom: 18px; }
+.mode-sw { margin-bottom: 10px; display: flex; }
+.mode-sw :deep(.el-radio-button) { flex: 1; }
+.mode-sw :deep(.el-radio-button__inner) { width: 100%; }
+.ds-select { margin-bottom: 14px; }
 .doc-scroll { flex: 1; margin: 0 -6px; }
 .doc { display: flex; align-items: center; gap: 8px; padding: 8px 10px; margin: 0 6px 2px; border-radius: 8px; cursor: pointer; font-size: 13px; color: var(--text-2); transition: background .15s; }
 .doc:hover { background: #f5f6fb; }

@@ -140,6 +140,15 @@ bge-m3 约 2.2GB、bge-reranker-v2-m3 约 2.2GB（首次启动经 hf-mirror 下�
 注意：百炼向量的相似度分布与 bge-m3 不同，无关问题也有 0.47~0.65，向量阈值（`SCORE_THRESHOLD`，云端默认 0.4）无法单独拒答，建议保持重排开启（拒答题 5 题中 4 题检索为空，剩下 1 题由大模型拒答）。
 云端重排调用失败时会自动退回混合检索，问答不中断。
 
+## 数据集问数（v0.5）
+
+上传 Excel / CSV，直接用中文提问，得到结论、图表、结果表和 SQL，并支持导出 CSV；智能问答页可以自动判断走文档问答、数据问答还是两者混合。
+- 使用说明：[docs/user-guide-datasets.md](docs/user-guide-datasets.md)
+- 设计文档：[docs/design-data-analysis.md](docs/design-data-analysis.md)
+- 上线部署：[docs/deploy-datasets.md](docs/deploy-datasets.md)（python 内存 1g、新卷 ai-kb-datasets、pip 阿里云备用源、自动迁移）
+- 示例数据：`demo-data/datasets/`（由 `backend-python/tools/gen_sample_datasets.py` 生成）
+- 测试：`pytest`（单元）、`python -m tests.e2e_datasets_api`（接口端到端）、`python -m tests.eval_nl2sql`（真实 DeepSeek 准确率）、`python -m tests.acceptance_datasets`（边界与安全）、`python -m tests.perf_datasets`（100 万行压测）
+
 ## 演示步骤（1-2 分钟）
 
 1. 登录 → 进入「文档管理」，上传 `demo-data/SK-850维护手册.pdf`

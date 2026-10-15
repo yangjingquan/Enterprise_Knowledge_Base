@@ -82,6 +82,7 @@ const initial = computed(() => (displayName || '?').slice(0, 1).toUpperCase())
 const mainMenus = [
   { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
   { path: '/documents', title: '文档管理', icon: 'Document' },
+  { path: '/datasets', title: '数据集', icon: 'Grid' },
   { path: '/history', title: '问答历史', icon: 'Clock' },
 ]
 const adminMenus = [

@@ -76,8 +76,11 @@ public class QaController {
     /** JSON 序列化工具 */
     private final ObjectMapper json = new ObjectMapper();
 
+    private final com.kb.service.DatasetCatalog catalog;
+
     public QaController(QaHistoryMapper history, DocumentMapper documents, PermissionService perm,
-                        @Value("${kb.rag-url}") String ragUrl) {
+                        @Value("${kb.rag-url}") String ragUrl, com.kb.service.DatasetCatalog catalog) {
+        this.catalog = catalog;
         this.history = history;
         this.documents = documents;
         this.perm = perm;
@@ -108,10 +111,13 @@ public class QaController {
 
         String question = String.valueOf(req.get("question"));
         Object rewritten = result.get("rewritten_question");
+        @SuppressWarnings("unchecked")
+        Map<String, Object> analysis = result.get("analysis") instanceof Map<?, ?> a ? (Map<String, Object>) a : null;
         QaHistory saved = saveHistory(req, user,
                 String.valueOf(result.get("answer")),
                 result.get("sources"),
-                question.equals(rewritten) ? null : (String) rewritten);
+                question.equals(rewritten) ? null : (String) rewritten,
+                result.get("mode") == null ? "doc" : String.valueOf(result.get("mode")), analysis);
 
         Map<String, Object> out = new HashMap<>();
         result.forEach((k, v) -> out.put(String.valueOf(k), v));
@@ -146,6 +152,8 @@ public class QaController {
             StringBuilder answer = new StringBuilder();   // 拼接完整答案，用于保存历史
             Object sources = List.of();                   // 引用的原文片段
             String rewritten = null;                      // 改写后的问题
+            String mode = "doc";                          // 路由结果
+            Map<String, Object> analysis = new HashMap<>(); // 数据分析快照：sql / table / chart
             boolean saved = false;
 
             try (BufferedReader reader = new BufferedReader(
@@ -161,9 +169,13 @@ public class QaController {
                             sources = event.get("data");
                         } else if ("rewrite".equals(type)) {
                             rewritten = String.valueOf(event.get("data"));
+                        } else if ("route".equals(type)) {
+                            mode = String.valueOf(event.get("data"));
+                        } else if ("sql".equals(type) || "table".equals(type) || "chart".equals(type)) {
+                            analysis.put(String.valueOf(type), event.get("data"));
                         } else if ("done".equals(type) && !saved && answer.length() > 0) {
                             // 结束前先保存历史，把历史 ID 告诉前端
-                            QaHistory qa = saveHistory(req, user, answer.toString(), sources, rewritten);
+                            QaHistory qa = saveHistory(req, user, answer.toString(), sources, rewritten, mode, analysis);
                             saved = true;
                             writeLine(os, "data: " + json.writeValueAsString(Map.of("type", "saved", "id", qa.getId())));
                             writeLine(os, "");
@@ -176,7 +188,7 @@ public class QaController {
 
             // 兜底：Python 异常断开、没有发送 done 时，也把已生成的部分保存下来
             if (!saved && answer.length() > 0) {
-                saveHistory(req, user, answer.toString(), sources, rewritten);
+                saveHistory(req, user, answer.toString(), sources, rewritten, mode, analysis);
             }
         };
 
@@ -296,6 +308,15 @@ public class QaController {
         body.put("document_id", req.get("documentId"));   // 允许为 null，表示检索全部文档
         body.put("kb_ids", kbIds);
         body.put("history", cleanHistory(req.get("history")));
+        // 问数：模式 + 有权限的已就绪数据集元数据（指定文档时只做文档问答）
+        Object mode = req.get("mode");
+        body.put("mode", mode == null ? "auto" : String.valueOf(mode));
+        List<Long> dsIds = null;
+        if (req.get("datasetIds") instanceof List<?> l && !l.isEmpty()) {
+            dsIds = l.stream().filter(x -> x instanceof Number).map(x -> ((Number) x).longValue()).toList();
+        }
+        body.put("dataset_ids", dsIds);
+        body.put("datasets", req.get("documentId") != null ? List.of() : catalog.forQuestion(kbIds, dsIds));
         return body;
     }
 
@@ -305,9 +326,14 @@ public class QaController {
         if (raw instanceof List<?> list) {
             for (Object item : list) {
                 if (item instanceof Map<?, ?> m && m.get("question") != null && m.get("answer") != null) {
-                    rounds.add(Map.of(
-                            "question", String.valueOf(m.get("question")),
-                            "answer", String.valueOf(m.get("answer"))));
+                    Map<String, String> r = new HashMap<>();
+                    r.put("question", String.valueOf(m.get("question")));
+                    r.put("answer", String.valueOf(m.get("answer")));
+                    if (m.get("sql") != null) {
+                        String sql = String.valueOf(m.get("sql"));
+                        r.put("sql", sql.length() > 4000 ? sql.substring(0, 4000) : sql);
+                    }
+                    rounds.add(r);
                 }
             }
         }
@@ -318,7 +344,16 @@ public class QaController {
     /** 保存一条问答历史，返回保存后的记录（含自增 ID） */
     private QaHistory saveHistory(Map<String, Object> req, CurrentUser user, String answer,
                                   Object sources, String rewritten) throws java.io.IOException {
+        return saveHistory(req, user, answer, sources, rewritten, null, null);
+    }
+
+    private QaHistory saveHistory(Map<String, Object> req, CurrentUser user, String answer, Object sources,
+                                  String rewritten, String mode, Map<String, Object> analysis) throws java.io.IOException {
         QaHistory qa = new QaHistory();
+        qa.setMode(mode == null ? "doc" : mode);
+        if (analysis != null && !analysis.isEmpty()) {
+            qa.setAnalysis(json.writeValueAsString(trimAnalysis(analysis)));
+        }
         qa.setQuestion(String.valueOf(req.get("question")));
         qa.setAnswer(answer);
         qa.setSources(json.writeValueAsString(sources));
@@ -339,6 +374,90 @@ public class QaController {
         }
         history.insert(qa);
         return qa;
+    }
+
+    /** 历史里只保存结果的前 50 行 */
+    @SuppressWarnings("unchecked")
+    private static Map<String, Object> trimAnalysis(Map<String, Object> a) {
+        Map<String, Object> out = new HashMap<>(a);
+        if (out.get("table") instanceof Map<?, ?> t) {
+            Map<String, Object> tt = new HashMap<>((Map<String, Object>) t);
+            if (tt.get("rows") instanceof List<?> rows && rows.size() > 50) {
+                tt.put("rows", rows.subList(0, 50));
+                tt.put("truncated", true);
+            }
+            out.put("table", tt);
+        }
+        return out;
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.kb.mapper.DatasetMapper datasetMapper;
+
+    /**
+     * 导出分析结果：GET /api/qa/{id}/export.csv
+     * 不信任前端传来的 SQL：按 historyId 取出保存的 SQL，由 Python 重新校验并执行（≤10000 行）。
+     * 只有提问人本人或管理员可以导出，且仍需对数据集所在知识库有查看权限。
+     */
+    @GetMapping("/{id}/export.csv")
+    @SuppressWarnings("unchecked")
+    public ResponseEntity<byte[]> exportCsv(@PathVariable Long id) throws java.io.IOException {
+        CurrentUser me = perm.current();
+        QaHistory qa = history.selectById(id);
+        if (qa == null || (!me.isAdmin() && !me.id().equals(qa.getUserId()))) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "记录不存在");
+        }
+        if (qa.getAnalysis() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "这条问答没有数据分析结果");
+        }
+        Map<String, Object> a = json.readValue(qa.getAnalysis(), Map.class);
+        Map<String, Object> sql = a.get("sql") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+        Map<String, Object> ds = sql.get("dataset") instanceof Map<?, ?> m ? (Map<String, Object>) m : Map.of();
+        if (!(ds.get("id") instanceof Number dsId) || sql.get("sql") == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "这条问答没有可导出的查询");
+        }
+        com.kb.entity.Dataset dataset = datasetMapper.selectById(dsId.longValue());
+        if (dataset == null || !perm.canRead(me, dataset.getKbId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "数据集不存在或无权访问");
+        }
+        if (!"ready".equals(dataset.getStatus())) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "数据集当前不可用");
+        }
+        Map<String, Object> result;
+        try {
+            result = rag.post().uri("/datasets/query").contentType(MediaType.APPLICATION_JSON)
+                    .body(Map.of("dataset_id", dsId.longValue(), "sql", String.valueOf(sql.get("sql")), "limit", 10000))
+                    .retrieve().body(Map.class);
+        } catch (org.springframework.web.client.RestClientResponseException e) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "重新执行查询失败");
+        }
+        StringBuilder csv = new StringBuilder("\uFEFF");   // BOM：Excel 打开中文不乱码
+        csv.append(csvLine((List<Object>) result.get("columns")));
+        for (Object row : (List<Object>) result.get("rows")) {
+            csv.append(csvLine((List<Object>) row));
+        }
+        String name = java.net.URLEncoder.encode("分析结果-" + id + ".csv", StandardCharsets.UTF_8).replace("+", "%20");
+        return ResponseEntity.ok()
+                .header("Content-Disposition", "attachment; filename=\"export-" + id + ".csv\"; filename*=UTF-8''" + name)
+                .header("X-Truncated", String.valueOf(Boolean.TRUE.equals(result.get("truncated"))))
+                .contentType(new MediaType("text", "csv", StandardCharsets.UTF_8))
+                .body(csv.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private static String csvLine(List<Object> cells) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < cells.size(); i++) {
+            if (i > 0) sb.append(',');
+            Object v = cells.get(i);
+            String s = v == null ? "" : String.valueOf(v);
+            // 防 CSV 公式注入：以 = + - @ 开头的文本前加单引号（数字除外）
+            if (!(v instanceof Number) && !s.isEmpty() && "=+-@".indexOf(s.charAt(0)) >= 0) s = "'" + s;
+            if (s.contains(",") || s.contains("\"") || s.contains("\n") || s.contains("\r")) {
+                s = "\"" + s.replace("\"", "\"\"") + "\"";
+            }
+            sb.append(s);
+        }
+        return sb.append("\r\n").toString();
     }
 
     /** 写一行并立即刷新到前端 */

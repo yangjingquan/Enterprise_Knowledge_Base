@@ -56,4 +56,10 @@ public class QaHistory {
 
     /** 提问时间 */
     private LocalDateTime createTime;
+
+    /** 回答方式：doc 文档问答 / data 数据分析 */
+    private String mode;
+
+    /** 数据分析快照（JSON）：sql、数据集、结果列和前 50 行、图表建议 */
+    private String analysis;
 }

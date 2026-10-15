@@ -43,9 +43,11 @@ public class KbController {
     private final UserMapper users;
     private final DocumentMapper documents;
     private final PermissionService perm;
+    private final com.kb.mapper.DatasetMapper datasets;
 
     public KbController(KbMapper kbs, KbMemberMapper members, UserMapper users,
-                        DocumentMapper documents, PermissionService perm) {
+                        DocumentMapper documents, PermissionService perm, com.kb.mapper.DatasetMapper datasets) {
+        this.datasets = datasets;
         this.kbs = kbs;
         this.members = members;
         this.users = users;
@@ -128,6 +130,10 @@ public class KbController {
         if (docCount > 0) {
             return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + docCount + " 个文档，请先删除或移走"));
         }
+        long dsCount = datasets.selectCount(new QueryWrapper<com.kb.entity.Dataset>().eq("kb_id", id));
+        if (dsCount > 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + dsCount + " 个数据集，请先删除"));
+        }
         members.delete(new QueryWrapper<KbMember>().eq("kb_id", id));
         kbs.deleteById(id);
         return ResponseEntity.ok(Map.of("ok", true));
@@ -167,6 +173,10 @@ public class KbController {
             if (!KB_ROLES.contains(String.valueOf(item.get("role")))) {
                 return ResponseEntity.badRequest().body(Map.of("error", "角色只能是 viewer 或 editor"));
             }
+        }
+        long dsCount = datasets.selectCount(new QueryWrapper<com.kb.entity.Dataset>().eq("kb_id", id));
+        if (dsCount > 0) {
+            return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + dsCount + " 个数据集，请先删除"));
         }
         members.delete(new QueryWrapper<KbMember>().eq("kb_id", id));
         for (Map<String, Object> item : req) {

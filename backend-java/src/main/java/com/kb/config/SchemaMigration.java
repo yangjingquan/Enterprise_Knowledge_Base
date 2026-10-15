@@ -38,7 +38,10 @@ public class SchemaMigration implements ApplicationRunner {
             new String[]{"qa_history", "user_id", "BIGINT NULL COMMENT '提问人ID'"},
             new String[]{"qa_history", "kb_id", "BIGINT NULL COMMENT '限定的知识库'"},
             new String[]{"user", "display_name", "VARCHAR(50) NULL COMMENT '显示名称'"},
-            new String[]{"user", "enabled", "TINYINT DEFAULT 1 COMMENT '1启用 0停用'"}
+            new String[]{"user", "enabled", "TINYINT DEFAULT 1 COMMENT '1启用 0停用'"},
+            // ---- 问数 ----
+            new String[]{"qa_history", "mode", "VARCHAR(10) NULL COMMENT 'doc 文档问答 / data 数据分析 / mixed 混合'"},
+            new String[]{"qa_history", "analysis", "JSON NULL COMMENT '数据分析快照'"}
     );
 
     /** 默认知识库名称：升级前上传的文档都归入这里，所有登录用户可见 */
@@ -66,6 +69,28 @@ public class SchemaMigration implements ApplicationRunner {
                 + "role VARCHAR(20) NOT NULL DEFAULT 'viewer', "
                 + "create_time DATETIME DEFAULT CURRENT_TIMESTAMP, "
                 + "UNIQUE KEY uk_kb_user (kb_id, user_id))");
+
+        // 1.1 结构化数据集（问数）：只存元数据，数据本身在 Python 服务的 DuckDB 文件里
+        jdbc.execute("CREATE TABLE IF NOT EXISTS dataset ("
+                + "id BIGINT PRIMARY KEY AUTO_INCREMENT, kb_id BIGINT NOT NULL, "
+                + "name VARCHAR(200), file_name VARCHAR(255), file_path VARCHAR(500), file_type VARCHAR(10), "
+                + "description VARCHAR(1000), status VARCHAR(20) DEFAULT 'pending', error_msg VARCHAR(1000), "
+                + "table_count INT DEFAULT 0, row_count BIGINT DEFAULT 0, send_samples TINYINT DEFAULT 1, "
+                + "user_id BIGINT, create_time DATETIME DEFAULT CURRENT_TIMESTAMP, INDEX idx_ds_kb (kb_id))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS dataset_block ("
+                + "id BIGINT PRIMARY KEY AUTO_INCREMENT, dataset_id BIGINT NOT NULL, sheet_name VARCHAR(200), "
+                + "range_ref VARCHAR(30), kind VARCHAR(10), detected_by VARCHAR(10), note_text TEXT NULL, "
+                + "INDEX idx_db_ds (dataset_id))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS dataset_table ("
+                + "id BIGINT PRIMARY KEY AUTO_INCREMENT, dataset_id BIGINT NOT NULL, block_id BIGINT NULL, "
+                + "sheet_name VARCHAR(200), physical_name VARCHAR(64), display_name VARCHAR(200), "
+                + "header_row INT, row_count BIGINT, description VARCHAR(1000), transform JSON NULL, "
+                + "INDEX idx_dt_ds (dataset_id))");
+        jdbc.execute("CREATE TABLE IF NOT EXISTS dataset_column ("
+                + "id BIGINT PRIMARY KEY AUTO_INCREMENT, table_id BIGINT NOT NULL, ordinal INT, "
+                + "physical_name VARCHAR(64), display_name VARCHAR(200), data_type VARCHAR(20), "
+                + "is_percent TINYINT DEFAULT 0, description VARCHAR(500), synonyms VARCHAR(500), profile JSON, "
+                + "INDEX idx_dc_t (table_id))");
 
         // 2. 新增的列
         for (String[] col : COLUMNS) {
