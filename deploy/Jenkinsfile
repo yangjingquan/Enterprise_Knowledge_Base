@@ -16,7 +16,7 @@ pipeline {
     DEPLOY_DIR = '/opt/ai-kb'
     PROJECT    = 'ai-kb'
     // 在宿主机上执行 compose 的一次性容器（复用宿主机 docker CLI 和 compose 插件）
-    RUNNER = 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker:ro -v /usr/libexec/docker/cli-plugins/docker-compose:/usr/libexec/docker/cli-plugins/docker-compose:ro -v /opt/ai-kb:/opt/ai-kb -w /opt/ai-kb/app python:3.12-slim'
+    RUNNER = 'docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v /usr/bin/docker:/usr/bin/docker:ro -v /usr/libexec/docker/cli-plugins:/usr/libexec/docker/cli-plugins:ro -e DOCKER_BUILDKIT=1 -e BUILDX_NO_DEFAULT_ATTESTATIONS=1 -v /opt/ai-kb:/opt/ai-kb -w /opt/ai-kb/app python:3.12-slim'
   }
   stages {
     stage('Validate') {
@@ -67,13 +67,26 @@ pipeline {
         '''
       }
     }
-    stage('Build (one by one)') {
+    stage('Build (changed only)') {
       steps {
         sh '''
           set -eux
+          # 只重建目录内容（git tree 哈希）有变化的镜像；状态记录在 /opt/ai-kb/.build-state
+          docker run --rm -v /opt/ai-kb:/d alpine:3.20 sh -c 'touch /d/.build-state; cat /d/.build-state' > .build-state.old
+          : > .build-state.new
           for svc in backend-java frontend backend-python; do
-            $RUNNER docker compose -p "$PROJECT" -f docker-compose.prod.yml build "$svc"
+            h=$(git rev-parse "HEAD:$svc")
+            img="ai-kb-$svc:latest"
+            if grep -qx "$svc $h" .build-state.old && docker image inspect "$img" >/dev/null 2>&1; then
+              echo "[skip] $svc 未变化（$h）"
+            else
+              start=$(date +%s)
+              $RUNNER docker compose -p "$PROJECT" -f docker-compose.prod.yml build --progress=plain "$svc"
+              echo "[built] $svc 用时 $(( $(date +%s) - start ))s"
+            fi
+            echo "$svc $h" >> .build-state.new
           done
+          docker run --rm -i -v /opt/ai-kb:/d alpine:3.20 sh -c 'cat > /d/.build-state' < .build-state.new
         '''
       }
     }

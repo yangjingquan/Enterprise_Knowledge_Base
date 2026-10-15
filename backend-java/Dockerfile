@@ -6,9 +6,10 @@ ENV MAVEN_OPTS="-Xmx384m -XX:+UseSerialGC"
 # 国内网络使用阿里云 Maven 镜像，避免 Maven Central 下载超时
 COPY settings.xml /root/.m2/settings.xml
 COPY pom.xml .
-RUN mvn -B dependency:go-offline
+# BuildKit 缓存挂载：Maven 本地仓库在多次构建之间复用，pom 变化时也只下载新增依赖
+RUN --mount=type=cache,target=/root/.m2/repository mvn -B -q dependency:go-offline
 COPY src ./src
-RUN mvn -B -DskipTests package
+RUN --mount=type=cache,target=/root/.m2/repository mvn -B -q -DskipTests package
 FROM eclipse-temurin:17-jre-jammy
 WORKDIR /app
 COPY --from=build /src/target/kb-backend-0.1.0.jar app.jar

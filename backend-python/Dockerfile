@@ -9,13 +9,14 @@ ARG WITH_LOCAL_MODELS=false
 COPY requirements.txt requirements-local.txt ./
 # 1. 安装基础依赖；2. 按需安装 CPU 版 torch 和本地模型依赖；
 # 3. rapidocr 依赖的 opencv-python 需要系统图形库 libGL，slim 镜像没有，换成功能相同的无界面版 opencv-python-headless
-RUN pip install --no-cache-dir -r requirements.txt \
+# BuildKit 缓存挂载：pip 下载缓存在多次构建之间复用（requirements 变化时只下载新增包）
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r requirements.txt \
     && if [ "$WITH_LOCAL_MODELS" = "true" ]; then \
-         pip install --no-cache-dir torch --index-url https://download.pytorch.org/whl/cpu \
-         && pip install --no-cache-dir -r requirements-local.txt; \
+         pip install torch --index-url https://download.pytorch.org/whl/cpu \
+         && pip install -r requirements-local.txt; \
        fi \
     && pip uninstall -y opencv-python \
-    && pip install --no-cache-dir opencv-python-headless==4.10.0.84
+    && pip install opencv-python-headless==4.10.0.84
 COPY app ./app
 COPY eval ./eval
 EXPOSE 8000
