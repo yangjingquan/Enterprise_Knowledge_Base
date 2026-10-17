@@ -7,6 +7,7 @@ import com.kb.entity.User;
 import com.kb.mapper.KbMapper;
 import com.kb.mapper.KbMemberMapper;
 import com.kb.mapper.UserMapper;
+import com.kb.service.PasswordCrypto;
 import com.kb.service.PermissionService;
 import com.kb.service.PermissionService.CurrentUser;
 import org.springframework.http.ResponseEntity;
@@ -44,9 +45,11 @@ public class UserController {
     private final KbMapper kbs;
     private final BCryptPasswordEncoder encoder;
     private final PermissionService perm;
+    private final PasswordCrypto crypto;
 
     public UserController(UserMapper users, KbMemberMapper members, KbMapper kbs,
-                          BCryptPasswordEncoder encoder, PermissionService perm) {
+                          BCryptPasswordEncoder encoder, PermissionService perm, PasswordCrypto crypto) {
+        this.crypto = crypto;
         this.users = users;
         this.members = members;
         this.kbs = kbs;
@@ -97,14 +100,22 @@ public class UserController {
     }
 
     /**
-     * 创建用户：{username, displayName, password, role: user|admin, grants: [{kbId, role}]}
+     * 创建用户：{username, displayName, passwordCipher（RSA-OAEP 密文，同登录）, role: user|admin, grants: [{kbId, role}]}
      */
     @PostMapping("/api/admin/users")
     @Transactional
     public ResponseEntity<?> create(@RequestBody Map<String, Object> req) {
         perm.requireAdmin();
         String username = str(req.get("username"));
-        String password = str(req.get("password"));
+        if (req.containsKey("password")) {
+            return bad("不支持明文密码，请刷新页面后重试");
+        }
+        String password;
+        try {
+            password = crypto.decrypt(req.get("passwordCipher"));
+        } catch (PasswordCrypto.BadPayload e) {
+            return bad(e.getMessage());
+        }
         if (!USERNAME.matcher(username).matches()) {
             return bad("用户名须以字母开头，由字母、数字、下划线组成，3~30 位");
         }
@@ -128,7 +139,7 @@ public class UserController {
     }
 
     /**
-     * 修改用户：{displayName?, role?, enabled?, password?, grants?}，只修改传入的字段。
+     * 修改用户：{displayName?, role?, enabled?, passwordCipher?, grants?}，只修改传入的字段。
      * 不允许管理员停用自己或取消自己的管理员身份，避免把自己锁在系统外。
      */
     @PutMapping("/api/admin/users/{id}")
@@ -158,10 +169,20 @@ public class UserController {
             u.setEnabled(enabled ? 1 : 0);
         }
         if (req.get("password") != null && !str(req.get("password")).isEmpty()) {
-            if (str(req.get("password")).length() < MIN_PASSWORD) {
+            return bad("不支持明文密码，请刷新页面后重试");
+        }
+        // 重置密码：passwordCipher 为 RSA-OAEP 密文（同登录）；不传表示不修改
+        if (req.get("passwordCipher") != null && !str(req.get("passwordCipher")).isEmpty()) {
+            String password;
+            try {
+                password = crypto.decrypt(req.get("passwordCipher"));
+            } catch (PasswordCrypto.BadPayload e) {
+                return bad(e.getMessage());
+            }
+            if (password.length() < MIN_PASSWORD) {
                 return bad("密码至少 " + MIN_PASSWORD + " 位");
             }
-            u.setPassword(encoder.encode(str(req.get("password"))));
+            u.setPassword(encoder.encode(password));
         }
         users.updateById(u);
         if (req.get("grants") instanceof List<?> grants) {

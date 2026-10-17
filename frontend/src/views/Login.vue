@@ -45,7 +45,9 @@
 <script setup>
 import { reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ElMessage } from 'element-plus'
 import api from '../api'
+import { encryptPassword } from '../passwordCrypto'
 
 const f = reactive({ username: '', password: '' })
 const loading = ref(false)
@@ -62,13 +64,23 @@ async function login() {
   if (!f.username || !f.password) return
   loading.value = true
   try {
-    const r = await api.post('/auth/login', f)
+    // 只发送 RSA-OAEP 密文，明文密码不出现在请求里
+    let passwordCipher
+    try {
+      passwordCipher = await encryptPassword(f.password)
+    } catch (e) {
+      if (!e.response) ElMessage.error('密码加密失败：' + e.message)
+      return
+    }
+    const r = await api.post('/auth/login', { username: f.username.trim(), passwordCipher })
     localStorage.setItem('token', r.token)
     localStorage.setItem('username', r.username)
     localStorage.setItem('displayName', r.displayName || r.username)
     localStorage.setItem('role', r.role)
     sessionStorage.clear()   // 换账号登录时清掉上一个人的对话
     router.push('/chat')
+  } catch {
+    // 错误提示（密码错误 / 已锁定等）已由 api 拦截器弹出
   } finally {
     loading.value = false
   }

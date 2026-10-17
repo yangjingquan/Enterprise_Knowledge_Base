@@ -83,6 +83,10 @@ services:
     depends_on:
       mysql: { condition: service_healthy }
       backend-python: { condition: service_healthy }
+    # 前端 nginx 通过别名 ai-kb-api 访问后端（见 frontend/nginx.conf），与服务名解耦
+    networks:
+      default:
+        aliases: [ai-kb-api]
 
   frontend:
     build: ./frontend

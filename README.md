@@ -184,7 +184,8 @@ bge-m3 约 2.2GB、bge-reranker-v2-m3 约 2.2GB（首次启动经 hf-mirror 下�
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| POST | /api/auth/login | 登录，返回 JWT |
+| GET | /api/auth/public-key | 获取 RSA 公钥（SPKI base64）和一次性 nonce（60 秒） |
+| POST | /api/auth/login | 登录：`{username, passwordCipher}`，密码以 RSA-OAEP(SHA-256) 加密 `{password, nonce, ts}`；连续失败 5 次锁定 10 分钟；返回 JWT |
 | POST | /api/documents/upload | 上传文档（multipart，pdf/docx/xlsx/pptx/txt/md） |
 | POST | /api/documents/url | 导入网页，请求体 `{"url": "https://..."}` |
 | GET | /api/documents | 文档列表 |
