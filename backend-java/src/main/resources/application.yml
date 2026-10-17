@@ -10,3 +10,11 @@ kb:
   upload-dir: ${UPLOAD_DIR:../uploads}
   rag-url: ${RAG_URL:http://localhost:8000}
   jwt-secret: ${JWT_SECRET:change-me-to-a-long-random-secret-key-0123456789}
+  # 密码传输加密：nonce 有效期、允许的客户端时间偏差
+  auth:
+    nonce-ttl-seconds: ${AUTH_NONCE_TTL_SECONDS:60}
+    ts-skew-seconds: ${AUTH_TS_SKEW_SECONDS:300}
+  # 登录限流：同一账号或 IP 连续失败次数、锁定时长
+  login:
+    max-fails: ${LOGIN_MAX_FAILS:5}
+    lock-seconds: ${LOGIN_LOCK_SECONDS:600}

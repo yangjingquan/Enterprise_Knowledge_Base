@@ -95,6 +95,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { encryptPassword } from '../passwordCrypto'
 import { isPhone, isNarrow, shortTime } from '../responsive'
 import { ROLE_NAMES } from '../kb'
 import PageHeader from '../components/PageHeader.vue'
@@ -138,7 +139,19 @@ async function save() {
   const grants = Object.entries(form.grants)
     .filter(([, role]) => role)
     .map(([kbId, role]) => ({ kbId: Number(kbId), role }))
-  const body = { displayName: form.displayName, role: form.role, grants, password: form.password || null }
+  const body = { displayName: form.displayName, role: form.role, grants }
+  // 新密码只以 RSA-OAEP 密文提交；编辑时留空表示不修改
+  if (form.password) {
+    if (form.password.length < 6) return ElMessage.warning('密码至少 6 位')
+    try {
+      body.passwordCipher = await encryptPassword(form.password)
+    } catch (e) {
+      if (!e.response) ElMessage.error('密码加密失败：' + e.message)
+      return
+    }
+  } else if (!form.id) {
+    return ElMessage.warning('请输入初始密码')
+  }
   if (form.id) {
     await api.put(`/admin/users/${form.id}`, body)
   } else {

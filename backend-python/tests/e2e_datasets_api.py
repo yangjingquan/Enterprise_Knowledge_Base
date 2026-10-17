@@ -23,9 +23,8 @@ def check(name, cond, info=""):
 
 
 def login(u, p):
-    r = requests.post(f"{BASE}/auth/login", json={"username": u, "password": p})
-    r.raise_for_status()
-    return {"Authorization": "Bearer " + r.json()["token"]}
+    from tests.kb_auth import login as _login  # 密码以 RSA-OAEP 密文提交
+    return _login(BASE, u, p)
 
 
 def wait(h, did, states, timeout=300):

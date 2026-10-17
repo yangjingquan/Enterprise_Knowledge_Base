@@ -19,7 +19,8 @@ BASE = (sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080") + "/api"
 
 
 def login(u, p):
-    return {"Authorization": "Bearer " + requests.post(f"{BASE}/auth/login", json={"username": u, "password": p}).json()["token"]}
+    from tests.kb_auth import login as _login  # 密码以 RSA-OAEP 密文提交
+    return _login(BASE, u, p)
 
 
 def import_ds(h, path, kb=1):
