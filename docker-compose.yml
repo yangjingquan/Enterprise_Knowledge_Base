@@ -66,6 +66,9 @@ services:
       retries: 60
 
   backend-java:
+    networks:
+      default:
+        aliases: [ai-kb-api]
     build: ./backend-java
     restart: unless-stopped
     mem_limit: ${JAVA_MEM_LIMIT:-512m}
