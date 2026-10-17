@@ -1,13 +1,16 @@
 <!--
   sheet 块画布：在原始单元格网格上用不同颜色框出识别出的块
   （数据=靛蓝、备注=灰、忽略=虚线），点击块选中；在网格上拖动可框选新范围（如 A5:H120）。
+  触屏：拖动手指用于滚动表格，框选改为"点起点单元格 → 点终点单元格"；也可直接输入范围（所有设备通用）。
 -->
 <template>
   <div class="canvas">
     <div class="legend">
       <span><i class="lg data" />数据块</span><span><i class="lg head" />表头</span>
       <span><i class="lg note" />备注</span><span><i class="lg ignore" />忽略</span>
-      <span class="muted">拖动鼠标框选范围 → {{ selection || '未框选' }}</span>
+      <span class="muted tip">{{ isTouch ? (anchor && !selection ? '再点终点单元格' : '点起点、再点终点单元格框选') : '拖动鼠标框选范围' }} → {{ selection || '未框选' }}</span>
+      <el-input v-model="typed" size="small" class="typed" placeholder="或输入 A5:H120" clearable
+        @keydown.enter.prevent="useTyped" @change="useTyped"><template #prepend>范围</template></el-input>
       <el-button v-if="selection" size="small" type="primary" plain @click="emit('apply', selection)">用作当前块范围</el-button>
       <el-button v-if="selection" size="small" plain @click="emit('add', selection)">新增为数据块</el-button>
       <span class="muted right">显示前 {{ rows.length }} 行 × {{ cols.length }} 列（共 {{ sheet.rows }} 行）</span>
@@ -28,6 +31,7 @@
 <script setup>
 import { ref, computed } from 'vue'
 import { letter, parseRange, formatRange } from './rangeUtil'
+import { isTouch } from '../responsive'
 
 const props = defineProps({ sheet: { type: Object, required: true }, active: { type: Number, default: -1 } })
 const emit = defineEmits(['select-block', 'apply', 'add'])
@@ -37,6 +41,9 @@ const cols = computed(() => [...Array(Math.min(Math.max(1, ...rows.value.map(r =
 const anchor = ref(null)
 const cursor = ref(null)
 const dragging = ref(false)
+const typed = ref('')
+// 触屏两次点击框选：false=下一次点击是起点，true=下一次点击是终点
+const waitEnd = ref(false)
 
 /** 每个单元格属于哪个块（按块顺序，先到先得） */
 const owner = computed(() => {
@@ -77,12 +84,26 @@ function cls(r, c) {
   return out
 }
 
-function start(r, c) { anchor.value = [r, c]; cursor.value = [r, c]; dragging.value = true }
+function start(r, c) {
+  if (isTouch) return // 触屏走 pick() 的两次点击
+  anchor.value = [r, c]; cursor.value = [r, c]; dragging.value = true
+}
 function move(r, c) { if (dragging.value) cursor.value = [r, c] }
 function pick(r, c) {
+  if (isTouch) {
+    if (waitEnd.value) { cursor.value = [r, c]; waitEnd.value = false; typed.value = selection.value; return }
+    anchor.value = [r, c]; cursor.value = [r, c]; waitEnd.value = true; typed.value = ''
+  }
   if (selection.value) return
   const bi = owner.value.get(r * 100 + c)
   if (bi !== undefined) emit('select-block', bi)
+}
+/** 手动输入范围：合法则作为当前框选 */
+function useTyped() {
+  const g = parseRange((typed.value || '').trim().toUpperCase())
+  if (!g) return
+  anchor.value = [g[0], g[1]]; cursor.value = [g[2], g[3]]; waitEnd.value = false
+  typed.value = formatRange(...g)
 }
 </script>
 
@@ -96,7 +117,16 @@ function pick(r, c) {
 .lg.head { background: #c7d2fe; }
 .lg.note { background: #f1f5f9; border: 1px solid #94a3b8; }
 .lg.ignore { border: 1px dashed #94a3b8; }
-.scroll { max-height: 280px; overflow: auto; user-select: none; }
+.scroll { max-height: 280px; overflow: auto; user-select: none; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
+.typed { width: 190px; }
+@media (max-width: 767px) {
+  .legend { gap: 8px; }
+  .legend .tip { width: 100%; }
+  .typed { width: 100%; }
+  .right { margin-left: 0; }
+  .scroll { max-height: 46vh; }
+}
+@media (pointer: coarse) { .grid td { padding: 6px 8px; } }
 .grid { border-collapse: collapse; font-size: 12px; }
 .grid th { background: #f8fafc; color: var(--text-3); font-weight: 500; padding: 2px 6px; position: sticky; top: 0; border: 1px solid #eef0f4; z-index: 1; }
 .grid tr th:first-child { position: sticky; left: 0; }

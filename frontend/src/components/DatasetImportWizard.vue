@@ -244,4 +244,9 @@ onMounted(async () => {
 .pv-title { font-size: 12px; color: var(--text-3); margin: 10px 0 6px; }
 .foot { margin-right: 12px; font-size: 13px; }
 :deep(.excluded) { opacity: .35; }
+@media (max-width: 767px) {
+  .block { padding: 10px 8px; }
+  .bname, .brange, .bheader { width: 100%; }
+  .foot { display: block; margin: 0 0 8px; }
+}
 </style>

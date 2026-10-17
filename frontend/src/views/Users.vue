@@ -11,7 +11,7 @@
       <el-input v-model="keyword" placeholder="搜索用户名 / 显示名称" prefix-icon="Search" clearable class="kw" />
       <span class="muted">共 {{ list.length }} 个用户，其中管理员 {{ list.filter(u => u.role === 'admin').length }} 个</span>
     </div>
-    <el-table :data="shown" v-loading="loading">
+    <el-table :data="shown" v-loading="loading" class="tbl-m">
       <el-table-column label="用户" min-width="220">
         <template #default="{ row }">
           <div class="who">

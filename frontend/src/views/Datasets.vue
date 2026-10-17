@@ -24,7 +24,7 @@
           <el-option v-for="k in kbs" :key="k.id" :label="k.name" :value="k.id" />
         </el-select>
       </div>
-      <el-table :data="shown" v-loading="loading" class="tbl">
+      <el-table :data="shown" v-loading="loading" class="tbl tbl-m">
         <el-table-column label="数据集" min-width="280">
           <template #default="{ row }">
             <div class="fname">

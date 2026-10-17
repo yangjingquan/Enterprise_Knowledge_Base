@@ -61,7 +61,7 @@
     <!-- 成员 -->
     <el-dialog v-model="memberVisible" :title="`成员 · ${current?.name || ''}`" width="620px">
       <div class="add">
-        <el-select v-model="addUser" filterable placeholder="选择用户" style="width:240px">
+        <el-select v-model="addUser" filterable placeholder="选择用户" style="width:240px;max-width:100%">
           <el-option
             v-for="u in candidates"
             :key="u.id"
@@ -75,7 +75,7 @@
         </el-select>
         <el-button :disabled="!addUser" @click="addMember">添加</el-button>
       </div>
-      <el-table :data="members" size="small">
+      <el-table :data="members" size="small" class="tbl-m" style="--tbl-min: 480px">
         <el-table-column label="用户">
           <template #default="{ row }">{{ row.displayName || row.username }}（{{ row.username }}）</template>
         </el-table-column>

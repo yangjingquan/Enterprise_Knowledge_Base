@@ -27,7 +27,7 @@
         </el-radio-group>
       </div>
 
-      <el-table :data="shown" v-loading="loading" row-key="id">
+      <el-table :data="shown" v-loading="loading" row-key="id" class="tbl-m" style="--tbl-min: 760px">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="detail">

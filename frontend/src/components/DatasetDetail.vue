@@ -130,4 +130,10 @@ onMounted(async () => {
 .ml { margin-left: 4px; }
 .prof { font-size: 12px; }
 .pv-title { font-size: 12px; color: var(--text-3); margin: 14px 0 6px; }
+@media (max-width: 1199px) { .tbl-meta { flex-wrap: wrap; } .tdesc { flex: 1 1 240px; } }
+@media (max-width: 767px) {
+  .tname, .tdesc { width: 100%; flex-basis: 100%; }
+  .ds-form :deep(.el-form-item) { flex-direction: column; align-items: stretch; }
+  .ds-form :deep(.el-form-item__label) { justify-content: flex-start !important; width: auto !important; }
+}
 </style>

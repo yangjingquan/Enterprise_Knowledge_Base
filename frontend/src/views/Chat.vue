@@ -10,7 +10,13 @@
 <template>
   <div class="chat">
     <!-- 左侧：检索范围设置 -->
-    <aside class="side panel">
+    <!-- 窄屏（<992px）：设置面板改为从左侧滑出，点遮罩关闭 -->
+    <div v-if="sideOpen" class="side-mask" @click="sideOpen = false" />
+    <aside :class="['side', 'panel', { open: sideOpen }]">
+      <div class="side-head">
+        <b>问答设置</b>
+        <el-button text circle aria-label="关闭" @click="sideOpen = false"><el-icon :size="18"><Close /></el-icon></el-button>
+      </div>
       <el-button type="primary" class="new-btn" icon="Plus" :disabled="loading" @click="newChat">新建对话</el-button>
       <div class="sec-title"><el-icon><Collection /></el-icon>知识库</div>
       <!-- 只列出当前用户有权限的知识库；不选表示在全部有权限的知识库中检索 -->
@@ -31,10 +37,10 @@
       </el-select>
       <div class="sec-title"><el-icon><Files /></el-icon>文档范围<span class="cnt">{{ scopedDocs.length }}</span></div>
       <el-scrollbar class="doc-scroll">
-        <div :class="['doc', { on: docId === null }]" @click="docId = null">
+        <div :class="['doc', { on: docId === null }]" @click="pickDoc(null)">
           <el-icon><FolderOpened /></el-icon><span>该范围内全部文档</span>
         </div>
-        <div v-for="d in scopedDocs" :key="d.id" :class="['doc', { on: docId === d.id }]" :title="d.fileName" @click="docId = d.id">
+        <div v-for="d in scopedDocs" :key="d.id" :class="['doc', { on: docId === d.id }]" :title="d.fileName" @click="pickDoc(d.id)">
           <span class="ext" :style="{ background: extColor(d.fileType) }">{{ extLabel(d.fileType) }}</span>
           <span class="doc-name">{{ d.fileName }}</span>
         </div>
@@ -46,6 +52,9 @@
     <section class="main panel">
       <div class="top">
         <div class="top-title">
+          <el-button class="side-btn" size="small" round aria-label="问答设置" @click="sideOpen = true">
+            <el-icon><Operation /></el-icon><span>{{ modeLabel }}</span>
+          </el-button>
           <b>{{ rounds ? '当前对话' : '新对话' }}</b>
           <el-tag v-if="rounds" size="small" round effect="plain">{{ rounds }} 轮 · 追问会自动结合上文</el-tag>
         </div>
@@ -172,6 +181,13 @@ const docs = ref([])
 const kbs = ref([])
 const kbId = ref(null)
 const docId = ref(null)
+// 窄屏下左侧设置面板（知识库 / 问答方式 / 文档范围）是否展开
+const sideOpen = ref(false)
+const modeLabel = computed(() => (docId.value ? '指定文档' : { auto: '自动', doc: '文档', data: '数据', mixed: '混合' }[mode.value] || '设置'))
+function pickDoc(id) {
+  docId.value = id
+  sideOpen.value = false
+}
 const mode = ref('auto')          // auto | doc | data
 const datasets = ref([])
 const datasetIds = ref([])
@@ -509,5 +525,40 @@ onMounted(async () => {
 .send { width: 38px; height: 38px; font-size: 18px; flex-shrink: 0; }
 .stop { background: #f97316; color: #fff; border: none; }
 .hint { text-align: center; font-size: 12px; color: var(--text-3); margin-top: 8px; }
-@media (max-width: 992px) { .side { display: none; } .chat { height: calc(100vh - 92px); } }
+.side-head, .side-btn, .side-mask { display: none; }
+@media (max-width: 991px) {
+  .chat { height: calc(100vh - 112px); height: calc(100dvh - 112px); min-height: 0; }
+  .side-btn { display: inline-flex; flex-shrink: 0; }
+  .side-btn span { margin-left: 4px; }
+  .side-head { display: flex; justify-content: space-between; align-items: center; margin: -4px 0 8px; font-size: 15px; }
+  .side-mask { display: block; position: fixed; inset: 0; background: rgba(15, 23, 42, .45); z-index: 2000; }
+  .side { position: fixed; z-index: 2001; top: 0; bottom: 0; left: 0; width: min(320px, 86vw); border-radius: 0 16px 16px 0;
+    padding-top: max(16px, env(safe-area-inset-top)); padding-bottom: max(16px, env(safe-area-inset-bottom));
+    transform: translateX(-105%); transition: transform .25s ease; visibility: hidden; }
+  .side.open { transform: none; visibility: visible; }
+  .top-title { min-width: 0; }
+}
+@media (max-width: 767px) {
+  .chat { gap: 0; margin: -12px; height: calc(100dvh - 56px - env(safe-area-inset-top)); }
+  .main { border-radius: 0; border: 0; }
+  .top { padding: 10px 12px; }
+  .top-title :deep(.el-tag) { display: none; }
+  .top-title b { white-space: nowrap; }
+  .scope { display: none; }
+  .inner { padding: 14px 12px 6px; }
+  .welcome { padding: 3vh 0 8px; }
+  .welcome h2 { font-size: 19px; }
+  .welcome p { margin-bottom: 18px; font-size: 13px; }
+  .suggest { grid-template-columns: 1fr; gap: 8px; }
+  .msg { gap: 8px; margin-bottom: 18px; }
+  .av { display: none; }
+  .body { max-width: 100%; }
+  .msg.user .body { max-width: 88%; }
+  .src-grid { grid-template-columns: 1fr; }
+  .composer { padding: 8px 10px max(8px, env(safe-area-inset-bottom)); border-top: 1px solid var(--border); background: #fff; }
+  .input-box { padding: 6px 6px 6px 12px; border-radius: 14px; }
+  .input-box :deep(.el-textarea__inner) { font-size: 16px; } /* 16px 防止 iOS 聚焦时自动放大 */
+  .send { width: 40px; height: 40px; }
+  .hint { display: none; }
+}
 </style>

@@ -64,4 +64,9 @@ const outCols = computed(() => {
 .cap { font-size: 12px; color: var(--text-3); margin-bottom: 4px; }
 .arrow { display: grid; place-items: center; color: #f59e0b; font-size: 20px; }
 .tip { font-size: 12px; margin-top: 6px; }
+@media (max-width: 767px) {
+  .cmp { flex-direction: column; }
+  .arrow { transform: rotate(90deg); }
+  .nm { width: 100%; }
+}
 </style>

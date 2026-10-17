@@ -1,10 +1,36 @@
 <!--
   后台布局：左侧可折叠深色导航（分组），顶部栏含折叠按钮、面包屑和用户菜单，内容区带切换动画。
-  窄屏（<992px）自动折叠侧边栏。
+  响应式：桌面（≥1200px）展开；平板（768–1199px）默认折叠为图标栏，可手动展开；
+  手机（<768px）隐藏侧边栏，点左上角汉堡按钮从左侧滑出导航抽屉。
 -->
 <template>
   <el-container class="layout">
-    <el-aside :width="collapsed ? '68px' : '228px'" class="aside">
+    <!-- 手机：导航抽屉 -->
+    <el-drawer v-if="isPhone" v-model="navOpen" direction="ltr" size="264px" :with-header="false" class="nav-drawer" modal-class="nav-mask">
+      <div class="aside drawer-aside">
+        <div class="logo" @click="go('/chat')">
+          <div class="mark"><el-icon><MagicStick /></el-icon></div>
+          <div class="brand"><b>企业AI知识库</b><span>星辰智造 · RAG</span></div>
+        </div>
+        <el-scrollbar>
+          <el-menu :default-active="$route.path" class="menu" @select="go">
+            <div class="group">工作台</div>
+            <el-menu-item v-for="m in mainMenus" :key="m.path" :index="m.path">
+              <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
+            </el-menu-item>
+            <template v-if="admin">
+              <div class="group">系统管理</div>
+              <el-menu-item v-for="m in adminMenus" :key="m.path" :index="m.path">
+                <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
+              </el-menu-item>
+            </template>
+          </el-menu>
+        </el-scrollbar>
+        <div class="aside-foot"><el-icon><Cpu /></el-icon><span>DeepSeek · 百炼 Embedding</span></div>
+      </div>
+    </el-drawer>
+
+    <el-aside v-if="!isPhone" :width="collapsed ? '68px' : '228px'" class="aside">
       <div class="logo" @click="$router.push('/chat')">
         <div class="mark"><el-icon><MagicStick /></el-icon></div>
         <transition name="fade"><div v-if="!collapsed" class="brand"><b>企业AI知识库</b><span>星辰智造 · RAG</span></div></transition>
@@ -32,10 +58,11 @@
     <el-container class="right">
       <el-header class="header">
         <div class="h-left">
-          <el-button text circle class="fold" @click="collapsed = !collapsed">
-            <el-icon :size="18"><component :is="collapsed ? 'Expand' : 'Fold'" /></el-icon>
+          <el-button text circle class="fold" :aria-label="isPhone ? '打开导航' : '折叠导航'" @click="toggleNav">
+            <el-icon :size="isPhone ? 22 : 18"><component :is="isPhone ? 'Menu' : collapsed ? 'Expand' : 'Fold'" /></el-icon>
           </el-button>
-          <el-breadcrumb separator="/">
+          <b v-if="isPhone" class="m-title">{{ $route.meta.title }}</b>
+          <el-breadcrumb v-else separator="/">
             <el-breadcrumb-item :to="{ path: '/chat' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="$route.meta.group">{{ $route.meta.group }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item>
@@ -71,12 +98,14 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
+import { isPhone, PAD_MAX } from '../responsive'
 
 const displayName = localStorage.getItem('displayName') || localStorage.getItem('username')
 const username = localStorage.getItem('username')
 const admin = localStorage.getItem('role') === 'admin'
 const router = useRouter()
-const collapsed = ref(window.innerWidth < 992)
+const collapsed = ref(window.innerWidth <= PAD_MAX)
+const navOpen = ref(false)
 const initial = computed(() => (displayName || '?').slice(0, 1).toUpperCase())
 
 const mainMenus = [
@@ -91,13 +120,30 @@ const adminMenus = [
   { path: '/eval', title: '效果评测', icon: 'DataAnalysis' },
 ]
 
+function toggleNav() {
+  if (isPhone.value) navOpen.value = true
+  else collapsed.value = !collapsed.value
+}
+/** 抽屉里点菜单：跳转并关闭抽屉 */
+function go(path) {
+  navOpen.value = false
+  if (path !== router.currentRoute.value.path) router.push(path)
+}
+
 function onCommand(c) {
   if (c === 'logout') logout()
   else if (c === 'history') router.push('/history')
 }
 function logout() { localStorage.clear(); sessionStorage.clear(); router.push('/login') }
 
-const onResize = () => { if (window.innerWidth < 992) collapsed.value = true }
+// 从桌面缩到平板宽度时自动折叠；放大回桌面时自动展开
+let lastWide = window.innerWidth > PAD_MAX
+const onResize = () => {
+  const wide = window.innerWidth > PAD_MAX
+  if (wide !== lastWide) collapsed.value = !wide
+  lastWide = wide
+  if (!isPhone.value) navOpen.value = false
+}
 onMounted(() => window.addEventListener('resize', onResize))
 onUnmounted(() => window.removeEventListener('resize', onResize))
 </script>
@@ -136,5 +182,14 @@ onUnmounted(() => window.removeEventListener('resize', onResize))
 .page-enter-from { opacity: 0; transform: translateY(6px); }
 .page-leave-to { opacity: 0; }
 .fade-enter-active { transition: opacity .3s; } .fade-enter-from { opacity: 0; }
-@media (max-width: 640px) { .u-text { display: none; } .main { padding: 14px; } }
+.m-title { font-size: 16px; color: var(--text-1); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.drawer-aside { height: 100%; padding-top: env(safe-area-inset-top); padding-bottom: env(safe-area-inset-bottom); }
+:global(.nav-drawer .el-drawer__body) { padding: 0 !important; background: var(--sider); overflow: hidden !important; }
+@media (max-width: 1199px) { .u-text { display: none; } .arrow { display: none; } }
+@media (max-width: 767px) {
+  .header { height: calc(56px + env(safe-area-inset-top)); padding: env(safe-area-inset-top) max(12px, env(safe-area-inset-right)) 0 max(8px, env(safe-area-inset-left)); }
+  .h-left { gap: 6px; min-width: 0; }
+  .fold { width: 44px; height: 44px; }
+  .main { padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left)); }
+}
 </style>

@@ -105,4 +105,11 @@ h2 { margin: 0 0 6px; font-size: 26px; }
 .demo-item b { display: block; font-size: 13px; }
 .demo-item span { font-size: 12px; color: var(--text-3); }
 @media (max-width: 900px) { .hero { display: none; } }
+@media (max-width: 767px) {
+  .login { min-height: 100%; height: auto; }
+  .form-side { align-items: flex-start; padding: max(40px, env(safe-area-inset-top)) 20px max(24px, env(safe-area-inset-bottom)); }
+  h2 { font-size: 22px; }
+  .sub { margin-bottom: 20px; }
+}
+@media (max-width: 360px) { .demo { grid-template-columns: 1fr; } }
 </style>

@@ -34,7 +34,7 @@
         <span v-if="!editableKbs.length" class="readonly"><el-icon><Lock /></el-icon>你对当前可见的知识库只有查看权限，如需上传请联系管理员授权</span>
       </div>
 
-      <el-table :data="shown" v-loading="loading" class="tbl">
+      <el-table :data="shown" v-loading="loading" class="tbl tbl-m">
         <el-table-column label="文件名 / 网页标题" min-width="300">
           <template #default="{ row }">
             <div class="fname">

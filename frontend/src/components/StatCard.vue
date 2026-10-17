@@ -19,4 +19,11 @@ defineProps({ icon: String, value: [String, Number], unit: String, label: String
 .v { font-size: 24px; font-weight: 700; color: var(--text-1); line-height: 1.2; }
 .v small { font-size: 13px; color: var(--text-3); margin-left: 2px; font-weight: 500; }
 .l { font-size: 13px; color: var(--text-3); margin-top: 2px; }
+@media (max-width: 767px) {
+  .stat { padding: 12px; gap: 10px; min-width: 0; }
+  .stat > div:last-child { min-width: 0; }
+  .icon { width: 36px; height: 36px; font-size: 18px; border-radius: 10px; }
+  .v { font-size: 20px; }
+  .l { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+}
 </style>

@@ -97,5 +97,9 @@ async function exportCsv() {
 .da-assume { font-size: 12px; color: var(--text-2); background: #f8fafc; border-radius: 6px; padding: 6px 10px; margin-bottom: 8px; }
 .da-tip { font-size: 12px; color: var(--text-3); margin-top: 4px; }
 .da-sql { margin-top: 8px; border: none; }
+@media (max-width: 767px) {
+  .da-head { flex-wrap: wrap; }
+  .da-tools { margin-left: 0; flex-wrap: wrap; }
+}
 .da-sql pre { margin: 0; white-space: pre-wrap; word-break: break-all; font-size: 12px; background: #0f172a; color: #e2e8f0; padding: 10px; border-radius: 6px; }
 </style>
