@@ -11,23 +11,29 @@
       <el-input v-model="keyword" placeholder="搜索用户名 / 显示名称" prefix-icon="Search" clearable class="kw" />
       <span class="muted">共 {{ list.length }} 个用户，其中管理员 {{ list.filter(u => u.role === 'admin').length }} 个</span>
     </div>
-    <el-table :data="shown" v-loading="loading" class="tbl-m">
-      <el-table-column label="用户" min-width="220">
+    <el-table :data="shown" v-loading="loading">
+      <el-table-column label="用户" :min-width="isNarrow ? 170 : 220">
         <template #default="{ row }">
           <div class="who">
             <el-avatar :size="36" :class="row.role === 'admin' ? 'av-admin' : 'av-user'">{{ (row.displayName || row.username).slice(0, 1) }}</el-avatar>
             <div><b>{{ row.displayName || row.username }}</b><span>{{ row.username }} · ID {{ row.id }}</span></div>
           </div>
+          <!-- 手机 / 平板：角色和知识库权限合并到这里 -->
+          <div v-if="isNarrow" class="meta-line grants-line">
+            <el-tag :type="row.role === 'admin' ? 'danger' : ''" size="small">{{ row.role === 'admin' ? '系统管理员' : '普通用户' }}</el-tag>
+            <span v-if="row.role === 'admin'">全部知识库</span>
+            <el-tag v-for="g in row.grants" :key="g.kbId" size="small" :type="g.role === 'editor' ? 'warning' : 'info'">{{ g.kbName }} · {{ ROLE_NAMES[g.role] }}</el-tag>
+          </div>
         </template>
       </el-table-column>
-      <el-table-column label="角色" width="100">
+      <el-table-column v-if="!isNarrow" label="角色" width="100">
         <template #default="{ row }">
           <el-tag :type="row.role === 'admin' ? 'danger' : ''" size="small">
             {{ row.role === 'admin' ? '系统管理员' : '普通用户' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="知识库权限">
+      <el-table-column v-if="!isNarrow" label="知识库权限">
         <template #default="{ row }">
           <span v-if="row.role === 'admin'" class="muted">全部知识库</span>
           <el-tag v-for="g in row.grants" :key="g.kbId" size="small" class="grant" :type="g.role === 'editor' ? 'warning' : 'info'">
@@ -35,12 +41,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="状态" width="90">
+      <el-table-column label="状态" :width="isPhone ? 64 : 90">
         <template #default="{ row }">
           <el-switch :model-value="row.enabled" @change="v => toggle(row, v)" />
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="80">
+      <el-table-column label="操作" :width="isPhone ? 56 : 80">
         <template #default="{ row }">
           <el-button link type="primary" @click="edit(row)">编辑</el-button>
         </template>
@@ -89,6 +95,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { isPhone, isNarrow, shortTime } from '../responsive'
 import { ROLE_NAMES } from '../kb'
 import PageHeader from '../components/PageHeader.vue'
 

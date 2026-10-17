@@ -75,11 +75,14 @@
         </el-select>
         <el-button :disabled="!addUser" @click="addMember">添加</el-button>
       </div>
-      <el-table :data="members" size="small" class="tbl-m" style="--tbl-min: 480px">
-        <el-table-column label="用户">
-          <template #default="{ row }">{{ row.displayName || row.username }}（{{ row.username }}）</template>
+      <el-table :data="members" size="small">
+        <el-table-column label="用户" min-width="120">
+          <template #default="{ row }">
+            <template v-if="isPhone"><b>{{ row.displayName || row.username }}</b><div class="muted">{{ row.username }}</div></template>
+            <template v-else>{{ row.displayName || row.username }}（{{ row.username }}）</template>
+          </template>
         </el-table-column>
-        <el-table-column label="角色" width="140">
+        <el-table-column label="角色" :width="isPhone ? 96 : 140">
           <template #default="{ row }">
             <el-select v-model="row.role" size="small">
               <el-option label="查看" value="viewer" />
@@ -87,7 +90,7 @@
             </el-select>
           </template>
         </el-table-column>
-        <el-table-column width="80">
+        <el-table-column :width="isPhone ? 56 : 80">
           <template #default="{ $index }">
             <el-button link type="danger" @click="members.splice($index, 1)">移除</el-button>
           </template>
@@ -106,6 +109,7 @@
 import { ref, reactive, computed, onMounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { isPhone, isNarrow, shortTime } from '../responsive'
 import PageHeader from '../components/PageHeader.vue'
 
 const palette = ['linear-gradient(135deg,#6366f1,#8b5cf6)', 'linear-gradient(135deg,#0ea5e9,#22d3ee)', 'linear-gradient(135deg,#10b981,#34d399)', 'linear-gradient(135deg,#f59e0b,#fb923c)', 'linear-gradient(135deg,#ec4899,#f472b6)']

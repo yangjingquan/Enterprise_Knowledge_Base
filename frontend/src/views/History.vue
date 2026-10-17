@@ -27,7 +27,7 @@
         </el-radio-group>
       </div>
 
-      <el-table :data="shown" v-loading="loading" row-key="id" class="tbl-m" style="--tbl-min: 760px">
+      <el-table :data="shown" v-loading="loading" row-key="id">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="detail">
@@ -42,10 +42,24 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="问题" min-width="300">
-          <template #default="{ row }"><span class="question">{{ row.question }}</span></template>
+        <el-table-column label="问题" :min-width="isNarrow ? 180 : 300">
+          <template #default="{ row }">
+            <span class="question">{{ row.question }}</span>
+            <!-- 手机 / 平板：次要列合并为摘要行 -->
+            <div v-if="isNarrow" class="meta-line">
+              <template v-if="isPhone">
+                <el-tag v-if="row.feedback === 1" size="small" type="success" round>👍 有用</el-tag>
+                <el-tag v-else-if="row.feedback === -1" size="small" type="danger" round>👎 没用</el-tag>
+              </template>
+              <el-tag size="small" effect="plain" :type="MODE[row.mode || 'doc'][1]">{{ MODE[row.mode || 'doc'][0] }}</el-tag>
+              <span>来源 {{ sources(row).length }}</span>
+              <span v-if="admin">{{ row.username }}</span>
+              <span>{{ shortTime(row.createTime) }}</span>
+              <el-button v-if="row.sessionId" link type="primary" size="small" @click.stop="showSession(row.sessionId)">{{ sessionCount(row.sessionId) }} 轮会话</el-button>
+            </div>
+          </template>
         </el-table-column>
-        <el-table-column label="反馈" width="96">
+        <el-table-column v-if="!isPhone" label="反馈" width="96">
           <template #default="{ row }">
             <el-tag v-if="row.feedback === 1" type="success" round>👍 有用</el-tag>
             <el-tooltip v-else-if="row.feedback === -1" :content="row.feedbackComment || '未填写原因'">
@@ -54,25 +68,25 @@
             <span v-else class="muted">—</span>
           </template>
         </el-table-column>
-        <el-table-column label="会话" width="100">
+        <el-table-column v-if="!isNarrow" label="会话" width="100">
           <template #default="{ row }">
             <el-button v-if="row.sessionId" link type="primary" icon="ChatDotRound" @click="showSession(row.sessionId)">
               {{ sessionCount(row.sessionId) }} 轮
             </el-button>
           </template>
         </el-table-column>
-        <el-table-column label="类型" width="90">
+        <el-table-column v-if="!isNarrow" label="类型" width="90">
           <template #default="{ row }"><el-tag size="small" effect="plain" :type="MODE[row.mode || 'doc'][1]">{{ MODE[row.mode || 'doc'][0] }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="来源" width="70" align="center">
+        <el-table-column v-if="!isNarrow" label="来源" width="70" align="center">
           <template #default="{ row }">{{ sources(row).length }}</template>
         </el-table-column>
-        <el-table-column v-if="admin" label="提问人" width="110">
+        <el-table-column v-if="admin && !isNarrow" label="提问人" width="110">
           <template #default="{ row }">
             <div class="asker"><el-avatar :size="22">{{ (row.username || '?').slice(0, 1).toUpperCase() }}</el-avatar>{{ row.username }}</div>
           </template>
         </el-table-column>
-        <el-table-column label="时间" width="170">
+        <el-table-column v-if="!isNarrow" label="时间" width="170">
           <template #default="{ row }"><span class="muted">{{ (row.createTime || "").replace("T", " ") }}</span></template>
         </el-table-column>
         <template #empty><el-empty description="暂无问答记录" :image-size="90" /></template>
@@ -80,7 +94,7 @@
     </div>
 
     <!-- 查看整段多轮对话 -->
-    <el-drawer v-model="sessionVisible" title="完整对话" size="640px">
+    <el-drawer v-model="sessionVisible" title="完整对话" :size="isPhone ? '100%' : '640px'">
       <div v-for="r in sessionRows" :key="r.id" class="round">
         <div class="q-row"><span class="q">{{ r.question }}</span></div>
         <div v-if="r.rewrittenQuestion" class="meta"><el-icon><Connection /></el-icon>改写：{{ r.rewrittenQuestion }}</div>
@@ -97,6 +111,7 @@ import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
 import DataAnswer from '../components/DataAnswer.vue'
 import api from '../api'
+import { isPhone, isNarrow, shortTime } from '../responsive'
 import { isAdmin } from '../kb'
 
 // 普通用户只能看到自己的问答记录（后端已限制）；管理员看到全部，并显示提问人
@@ -182,6 +197,7 @@ onMounted(load)
 .kw { width: 260px; }
 .question { font-weight: 500; color: var(--text-1); }
 .detail { padding: 8px 48px 16px; }
+@media (max-width: 767px) { .detail { padding: 6px 4px 12px; } }
 .meta { font-size: 12px; color: var(--text-3); display: flex; align-items: center; gap: 4px; margin-bottom: 8px; }
 .reason { margin-bottom: 10px; }
 .answer { background: #fafbfd; border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; }

@@ -24,42 +24,62 @@
           <el-option v-for="k in kbs" :key="k.id" :label="k.name" :value="k.id" />
         </el-select>
       </div>
-      <el-table :data="shown" v-loading="loading" class="tbl tbl-m">
-        <el-table-column label="数据集" min-width="280">
+      <el-table :data="shown" v-loading="loading" class="tbl">
+        <el-table-column label="数据集" :min-width="isNarrow ? 180 : 280">
           <template #default="{ row }">
             <div class="fname">
               <span class="ficon" :style="{ background: row.fileType === 'csv' ? '#0891b2' : '#16a34a' }">{{ row.fileType.toUpperCase() }}</span>
               <div class="fmain">
                 <a class="ftitle link" @click="openRow(row)">{{ row.name }}</a>
-                <span class="fid">{{ row.fileName }}</span>
+                <span v-if="!isNarrow" class="fid">{{ row.fileName }}</span>
+                <div v-else class="meta-line">
+                  <span v-if="isPhone" :class="['status', row.status]"><i />{{ STATUS[row.status] || row.status }}</span>
+                  <span>{{ kbName(row.kbId) }}</span>
+                  <span>{{ row.tableCount || 0 }} 表 / {{ (row.rowCount || 0).toLocaleString() }} 行</span>
+                  <span>{{ shortTime(row.createTime) }}</span>
+                </div>
               </div>
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="知识库" width="150">
+        <el-table-column v-if="!isNarrow" label="知识库" width="150">
           <template #default="{ row }"><el-tag effect="plain" type="info">{{ kbName(row.kbId) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="状态" width="130">
+        <el-table-column v-if="!isPhone" label="状态" width="130">
           <template #default="{ row }">
             <el-tooltip :disabled="row.status !== 'failed'" :content="row.errorMsg || ''">
               <span :class="['status', row.status]"><i />{{ STATUS[row.status] || row.status }}</span>
             </el-tooltip>
           </template>
         </el-table-column>
-        <el-table-column label="表 / 行" width="140" align="center">
+        <el-table-column v-if="!isNarrow" label="表 / 行" width="140" align="center">
           <template #default="{ row }">{{ row.tableCount || 0 }} / {{ (row.rowCount || 0).toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column label="上传时间" width="170">
+        <el-table-column v-if="!isNarrow" label="上传时间" width="170">
           <template #default="{ row }"><span class="muted">{{ (row.createTime || '').replace('T', ' ') }}</span></template>
         </el-table-column>
-        <el-table-column label="操作" width="190" fixed="right">
+        <el-table-column :label="isPhone ? '' : '操作'" :width="isPhone ? 56 : 190" fixed="right">
           <template #default="{ row }">
+            <!-- 手机：操作收进"⋯"菜单 -->
+            <el-dropdown v-if="isPhone" trigger="click" @command="c => rowCommand(c, row)">
+              <el-button link class="more" aria-label="更多操作"><el-icon :size="18"><MoreFilled /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="row.status === 'awaiting_confirm' && canEditKb(row.kbId)" command="confirm" icon="Check">确认导入</el-dropdown-item>
+                  <el-dropdown-item v-else-if="row.status === 'ready'" command="view" icon="View">查看</el-dropdown-item>
+                  <el-dropdown-item v-if="['ready', 'failed'].includes(row.status) && canEditKb(row.kbId) && row.tableCount !== undefined" command="reimport" icon="Setting">重新导入</el-dropdown-item>
+                  <el-dropdown-item v-if="canEditKb(row.kbId)" command="delete" icon="Delete" divided>删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
+            <template v-else>
             <el-button v-if="row.status === 'awaiting_confirm' && canEditKb(row.kbId)" link type="warning" icon="Check" @click="wizardId = row.id">确认导入</el-button>
             <el-button v-else-if="row.status === 'ready'" link type="primary" icon="View" @click="detailId = row.id">查看</el-button>
             <el-button v-if="['ready', 'failed'].includes(row.status) && canEditKb(row.kbId) && row.tableCount !== undefined" link icon="Setting" @click="wizardId = row.id">重新导入</el-button>
             <el-popconfirm v-if="canEditKb(row.kbId)" title="确定删除该数据集及其全部数据？" width="240" @confirm="remove(row.id)">
               <template #reference><el-button link type="danger" icon="Delete">删除</el-button></template>
             </el-popconfirm>
+            </template>
           </template>
         </el-table-column>
         <template #empty>
@@ -95,8 +115,9 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { ElMessage } from 'element-plus'
+import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import { isPhone, isNarrow, shortTime } from '../responsive'
 import { fetchMyKbs, canEdit } from '../kb'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'
@@ -170,6 +191,16 @@ async function waitForPlan(id) {
 function openRow(row) {
   if (row.status === 'ready') detailId.value = row.id
   else if (row.status === 'awaiting_confirm' && canEditKb(row.kbId)) wizardId.value = row.id
+}
+
+/** 手机"⋯"菜单 */
+async function rowCommand(c, row) {
+  if (c === 'view') detailId.value = row.id
+  else if (c === 'confirm' || c === 'reimport') wizardId.value = row.id
+  else if (c === 'delete') {
+    await ElMessageBox.confirm('确定删除该数据集及其全部数据？', '删除数据集', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
+    remove(row.id)
+  }
 }
 
 function onImported() {

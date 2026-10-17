@@ -97,7 +97,7 @@ img, canvas, video { max-width: 100%; }
   .el-popper { max-width: calc(100vw - 24px); }
   /* 列表表格：给出最小宽度，在卡片内横向滚动（"操作"等固定列仍可见） */
   .panel, .el-tab-pane { overflow-x: auto; -webkit-overflow-scrolling: touch; }
-  .el-table.tbl-m { min-width: var(--tbl-min, 680px); }
+
   .panel-pad { padding: 14px; }
   .el-input__inner, .el-textarea__inner, .el-select__selected-item { font-size: 16px; } /* 防止 iOS 聚焦自动放大 */
   .toolbar-row > .el-input, .toolbar-row > .el-select { width: 100% !important; }
@@ -116,4 +116,23 @@ img, canvas, video { max-width: 100%; }
   .el-radio-button__inner { padding-top: 10px; padding-bottom: 10px; }
   .el-checkbox, .el-radio { min-height: 32px; }
   .el-table .cell .el-button + .el-button { margin-left: 4px; }
+}
+
+/* 手机 / 平板列表：主列下方的摘要行（次要列合并于此） */
+.meta-line { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 10px; margin-top: 3px; font-size: 12px; color: var(--text-3); line-height: 18px; }
+.meta-line > span { white-space: nowrap; }
+.meta-line .el-tag { margin: 0; }
+/* 手机 / 平板：筛选用的单选组占满一行、等分 */
+@media (max-width: 1199px) {
+  .filter.toolbar-row > .el-radio-group, .toolbar-row.filter > .el-radio-group { display: flex; flex-wrap: nowrap; }
+}
+@media (max-width: 767px) {
+  .toolbar-row > .el-radio-group { width: 100%; overflow: visible !important; }
+  .toolbar-row > .el-radio-group > .el-radio-button { flex: 1 1 0; min-width: 0; }
+  .toolbar-row > .el-radio-group .el-radio-button__inner { width: 100%; padding-left: 4px; padding-right: 4px; white-space: nowrap; }
+}
+/* 手机：回答里的 Markdown 表格单元格至少 4 个字宽，列多时在表格内横向滑动（不出现一字一行） */
+@media (max-width: 767px) {
+  .markdown table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .markdown th, .markdown td { min-width: 4.5em; }
 }

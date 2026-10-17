@@ -34,15 +34,22 @@
         <span v-if="!editableKbs.length" class="readonly"><el-icon><Lock /></el-icon>你对当前可见的知识库只有查看权限，如需上传请联系管理员授权</span>
       </div>
 
-      <el-table :data="shown" v-loading="loading" class="tbl tbl-m">
-        <el-table-column label="文件名 / 网页标题" min-width="300">
+      <el-table :data="shown" v-loading="loading" class="tbl">
+        <el-table-column label="文件名 / 网页标题" :min-width="isNarrow ? 180 : 300">
           <template #default="{ row }">
             <div class="fname">
               <span class="ficon" :style="{ background: TYPE_COLORS[row.fileType] || '#64748b' }">{{ SHORT[row.fileType] || (row.fileType || '').toUpperCase().slice(0, 4) }}</span>
               <div class="fmain">
                 <div class="ftitle" :title="row.fileName">{{ row.fileName }}</div>
                 <a v-if="row.sourceUrl" :href="row.sourceUrl" target="_blank" rel="noopener" class="src-url">{{ row.sourceUrl }}</a>
-                <span v-else class="fid">ID {{ row.id }}</span>
+                <span v-else-if="!isNarrow" class="fid">ID {{ row.id }}</span>
+                <!-- 手机 / 平板：次要列合并为一行摘要 -->
+                <div v-if="isNarrow" class="meta-line">
+                  <span v-if="isPhone">{{ kbName(row.kbId) }}</span>
+                  <span :class="['status', row.status]"><i />{{ tag[row.status]?.[1] }}</span>
+                  <span>{{ row.chunkCount ?? 0 }} 切片</span>
+                  <span>{{ shortTime(row.createTime) }}</span>
+                </div>
               </div>
               <!-- 扫描件经 OCR 识别 -->
               <el-tooltip v-if="row.ocrPages > 0" :content="`${row.ocrPages} 页为扫描件，已通过 OCR 识别文字`">
@@ -51,7 +58,7 @@
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="知识库" width="170">
+        <el-table-column v-if="!isPhone" label="知识库" width="170">
           <template #default="{ row }">
             <el-select v-if="canEditKb(row.kbId) && editableKbs.length > 1" :model-value="row.kbId" size="small" @change="v => move(row, v)">
               <el-option v-for="k in editableKbs" :key="k.id" :label="k.name" :value="k.id" />
@@ -59,20 +66,20 @@
             <el-tag v-else effect="plain" type="info">{{ kbName(row.kbId) }}</el-tag>
           </template>
         </el-table-column>
-        <el-table-column label="状态" width="110">
+        <el-table-column v-if="!isNarrow" label="状态" width="110">
           <template #default="{ row }">
             <span :class="['status', row.status]"><i />{{ tag[row.status]?.[1] }}</span>
           </template>
         </el-table-column>
-        <el-table-column prop="chunkCount" label="切片数" width="90" align="center" />
-        <el-table-column label="上传时间" width="170">
+        <el-table-column v-if="!isNarrow" prop="chunkCount" label="切片数" width="90" align="center" />
+        <el-table-column v-if="!isNarrow" label="上传时间" width="170">
           <template #default="{ row }"><span class="muted">{{ (row.createTime || '').replace('T', ' ') }}</span></template>
         </el-table-column>
-        <el-table-column label="操作" width="90" fixed="right">
+        <el-table-column :label="isPhone ? '' : '操作'" :width="isPhone ? 52 : 90" fixed="right">
           <template #default="{ row }">
             <el-popconfirm v-if="canEditKb(row.kbId)" title="确定删除该文档及其向量数据？" width="240" @confirm="remove(row.id)">
               <template #reference>
-                <el-button link type="danger" icon="Delete">删除</el-button>
+                <el-button link type="danger" icon="Delete" :aria-label="'删除'">{{ isPhone ? '' : '删除' }}</el-button>
               </template>
             </el-popconfirm>
           </template>
@@ -124,6 +131,7 @@
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import { isPhone, isNarrow, shortTime } from '../responsive'
 import { fetchMyKbs, canEdit } from '../kb'
 import PageHeader from '../components/PageHeader.vue'
 import StatCard from '../components/StatCard.vue'

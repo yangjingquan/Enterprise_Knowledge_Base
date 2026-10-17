@@ -61,7 +61,7 @@
           <el-button text circle class="fold" :aria-label="isPhone ? '打开导航' : '折叠导航'" @click="toggleNav">
             <el-icon :size="isPhone ? 22 : 18"><component :is="isPhone ? 'Menu' : collapsed ? 'Expand' : 'Fold'" /></el-icon>
           </el-button>
-          <b v-if="isPhone" class="m-title">{{ $route.meta.title }}</b>
+          <b v-if="isCompact" class="m-title">{{ $route.meta.title }}</b>
           <el-breadcrumb v-else separator="/">
             <el-breadcrumb-item :to="{ path: '/chat' }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="$route.meta.group">{{ $route.meta.group }}</el-breadcrumb-item>
@@ -98,7 +98,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { isPhone, PAD_MAX } from '../responsive'
+import { isPhone, isCompact, PAD_MAX } from '../responsive'
 
 const displayName = localStorage.getItem('displayName') || localStorage.getItem('username')
 const username = localStorage.getItem('username')

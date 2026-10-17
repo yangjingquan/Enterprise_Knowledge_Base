@@ -24,6 +24,6 @@ defineProps({ icon: String, value: [String, Number], unit: String, label: String
   .stat > div:last-child { min-width: 0; }
   .icon { width: 36px; height: 36px; font-size: 18px; border-radius: 10px; }
   .v { font-size: 20px; }
-  .l { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .l { font-size: 12px; line-height: 16px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; word-break: keep-all; overflow-wrap: anywhere; }
 }
 </style>
