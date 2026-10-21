@@ -19,13 +19,13 @@ def _doc_text(sources):
     return "\n\n".join(f"[{x['index']}]（{x['file_name']} {rag._location(x)}）\n{x['text']}" for x in sources)
 
 
-def answer_stream(question, datasets, dataset_ids, history, document_id=None, kb_ids=None):
+def answer_stream(question, datasets, dataset_ids, history, document_id=None, kb_ids=None, retrieval_mode=None):
     """先检索文档（拿到标准/阈值），再让 SQL 直接算出"是否达标"等判断列，最后结合两者生成结论"""
     hist = rag.normalize_history(history)
     standalone = rag.rewrite_question(question, hist)
     if standalone != question:
         yield {"type": "rewrite", "data": standalone}
-    sources = rag._retrieve(standalone, document_id, rag.TOP_K, kb_ids)
+    sources = rag._retrieve(standalone, document_id, rag.TOP_K, kb_ids, retrieval_mode)
     yield {"type": "sources", "data": sources}
 
     table = None

@@ -3,6 +3,7 @@ package com.kb.controller;
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.kb.entity.Document;
 import com.kb.mapper.DocumentMapper;
+import com.kb.service.DocumentCleanupService;
 import com.kb.service.IngestService;
 import com.kb.service.PermissionService;
 import com.kb.service.PermissionService.CurrentUser;
@@ -59,15 +60,30 @@ public class DocumentController {
     private final DocumentMapper mapper;
     private final IngestService ingest;
     private final PermissionService perm;
+    private final DocumentCleanupService cleanup;
 
     /** 上传文件的保存目录，来自配置项 kb.upload-dir */
     @Value("${kb.upload-dir}")
     private String uploadDir;
 
-    public DocumentController(DocumentMapper mapper, IngestService ingest, PermissionService perm) {
+    public DocumentController(DocumentMapper mapper, IngestService ingest, PermissionService perm,
+                              DocumentCleanupService cleanup) {
         this.mapper = mapper;
         this.ingest = ingest;
         this.perm = perm;
+        this.cleanup = cleanup;
+    }
+
+    /** 计算文件内容的 SHA-256（十六进制小写） */
+    private static String sha256(Path file) throws Exception {
+        java.security.MessageDigest md = java.security.MessageDigest.getInstance("SHA-256");
+        try (java.io.InputStream in = Files.newInputStream(file)) {
+            byte[] buf = new byte[64 * 1024];
+            for (int n; (n = in.read(buf)) > 0; ) {
+                md.update(buf, 0, n);
+            }
+        }
+        return java.util.HexFormat.of().formatHex(md.digest());
     }
 
     /**
@@ -96,6 +112,17 @@ public class DocumentController {
         Path target = dir.resolve(UUID.randomUUID() + "." + ext);
         file.transferTo(target);
 
+        // 2.1 去重：同一知识库内内容完全相同（SHA-256 一致）的文件不允许重复上传；不同知识库之间允许
+        String hash = sha256(target);
+        Document dup = mapper.selectOne(new QueryWrapper<Document>()
+                .eq("kb_id", kbId).eq("file_hash", hash).isNull("cleanup_status").last("LIMIT 1"));
+        if (dup != null) {
+            Files.deleteIfExists(target);
+            return ResponseEntity.status(409).body(Map.of(
+                    "error", "文件已存在：该知识库中已有相同内容的文件「" + dup.getFileName() + "」",
+                    "existingId", dup.getId()));
+        }
+
         // 3. 保存文档记录
         Document doc = new Document();
         doc.setTitle(name.substring(0, dot));
@@ -107,6 +134,7 @@ public class DocumentController {
         doc.setOcrPages(0);
         doc.setKbId(kbId);
         doc.setUserId(me.id());
+        doc.setFileHash(hash);
         mapper.insert(doc);   // 插入后 doc.getId() 会被回填为自增 ID
 
         // 4. 异步处理（@Async 方法，在后台线程执行，这里不会等待）
@@ -170,7 +198,44 @@ public class DocumentController {
         if (readable.isEmpty()) {
             return List.of();
         }
-        return mapper.selectList(new QueryWrapper<Document>().in("kb_id", readable).orderByAsc("id"));
+        // 已删除、等待后台清理向量的文档不显示
+        return mapper.selectList(new QueryWrapper<Document>().in("kb_id", readable)
+                .isNull("cleanup_status").orderByAsc("id"));
+    }
+
+    /**
+     * 重新处理失败的文档：POST /api/documents/{id}/retry。
+     * 用服务器上保存的原文件重新解析入库（不需要重新上传），需要编辑权限，只允许 failed 状态。
+     */
+    @PostMapping("/{id}/retry")
+    public ResponseEntity<?> retry(@PathVariable Long id) {
+        Document doc = mapper.selectById(id);
+        if (doc != null && doc.getCleanupStatus() != null) {
+            doc = null;
+        }
+        perm.requireEditable(perm.current(), doc);
+        if (!"failed".equals(doc.getStatus())) {
+            return ResponseEntity.status(409).body(Map.of("error", "只有处理失败的文档可以重试"));
+        }
+        Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
+        Path path = Paths.get(doc.getFilePath()).toAbsolutePath().normalize();
+        if (!path.startsWith(root) || !Files.isRegularFile(path)) {
+            return ResponseEntity.status(410).body(Map.of("error", "原文件已不存在，请删除后重新上传"));
+        }
+        mapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<Document>()
+                .eq("id", id).set("status", "pending").set("error_msg", null));
+        ingest.ingest(id);
+        return ResponseEntity.ok(mapper.selectById(id));
+    }
+
+    /**
+     * 清理孤立向量（仅管理员）：POST /api/documents/admin/purge-orphans?dryRun=true。
+     * 删除向量库中数据库已不存在对应文档的向量；dryRun=true 时只统计不删除。
+     */
+    @PostMapping("/admin/purge-orphans")
+    public Map<String, Object> purgeOrphans(@RequestParam(defaultValue = "false") boolean dryRun) {
+        perm.requireAdmin();
+        return cleanup.purgeOrphans(dryRun);
     }
 
     /**
@@ -232,24 +297,19 @@ public class DocumentController {
         return ingest.context(id, chunkIndex, Math.max(0, Math.min(window, 5)));
     }
 
-    /** 删除文档：DELETE /api/documents/{id}，同时删除向量库中的文本块和服务器上的原文件 */
+    /**
+     * 删除文档：DELETE /api/documents/{id}。
+     * 先删除向量库中的文本块，成功后再删数据库记录和原文件；
+     * 向量删除失败时标记为"待清理"（列表中不再显示），后台自动重试，返回 cleanupPending=true。
+     */
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@PathVariable Long id) {
         Document doc = mapper.selectById(id);
         perm.requireEditable(perm.current(), doc);
-        ingest.deleteVectors(id);
-        mapper.deleteById(id);
-        if (doc != null && doc.getFilePath() != null) {
-            try {
-                Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
-                Path path = Paths.get(doc.getFilePath()).toAbsolutePath().normalize();
-                if (path.startsWith(root)) {
-                    Files.deleteIfExists(path);
-                }
-            } catch (Exception ignored) {
-                // 原文件删除失败不影响接口结果
-            }
+        if (doc.getCleanupStatus() != null) {
+            return Map.of("ok", true, "cleanupPending", true);   // 已在等待后台清理
         }
-        return Map.of("ok", true);
+        boolean done = cleanup.remove(doc);
+        return Map.of("ok", true, "cleanupPending", !done);
     }
 }

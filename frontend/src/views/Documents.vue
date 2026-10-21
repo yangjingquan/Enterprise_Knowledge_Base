@@ -48,6 +48,7 @@
                   <span v-if="isPhone">{{ kbName(row.kbId) }}</span>
                   <span :class="['status', row.status]"><i />{{ tag[row.status]?.[1] }}</span>
                   <span>{{ row.chunkCount ?? 0 }} 切片</span>
+                  <span v-if="row.status === 'failed' && row.errorMsg" class="err-line" data-test="error-msg">{{ row.errorMsg }}</span>
                   <span>{{ shortTime(row.createTime) }}</span>
                 </div>
               </div>
@@ -68,15 +69,23 @@
         </el-table-column>
         <el-table-column v-if="!isNarrow" label="状态" width="110">
           <template #default="{ row }">
-            <span :class="['status', row.status]"><i />{{ tag[row.status]?.[1] }}</span>
+            <!-- 失败时悬停查看原因 -->
+            <el-tooltip v-if="row.status === 'failed'" :content="row.errorMsg || '处理失败（无详细原因）'" placement="top">
+              <span :class="['status', row.status]" data-test="failed-status"><i />{{ tag[row.status]?.[1] }}</span>
+            </el-tooltip>
+            <span v-else :class="['status', row.status]"><i />{{ tag[row.status]?.[1] }}</span>
+            <div v-if="row.status === 'failed' && row.errorMsg" class="err-line" data-test="error-msg">{{ row.errorMsg }}</div>
           </template>
         </el-table-column>
         <el-table-column v-if="!isNarrow" prop="chunkCount" label="切片数" width="90" align="center" />
         <el-table-column v-if="!isNarrow" label="上传时间" width="170">
           <template #default="{ row }"><span class="muted">{{ (row.createTime || '').replace('T', ' ') }}</span></template>
         </el-table-column>
-        <el-table-column :label="isPhone ? '' : '操作'" :width="isPhone ? 52 : 90" fixed="right">
+        <el-table-column :label="isPhone ? '' : '操作'" :width="isPhone ? 84 : 140" fixed="right">
           <template #default="{ row }">
+            <!-- 处理失败：用已保存的原文件重新解析 -->
+            <el-button v-if="row.status === 'failed' && canEditKb(row.kbId)" link type="primary" icon="Refresh"
+                       :aria-label="'重试'" data-test="retry" @click="retry(row)">{{ isPhone ? '' : '重试' }}</el-button>
             <el-popconfirm v-if="canEditKb(row.kbId)" title="确定删除该文档及其向量数据？" width="240" @confirm="remove(row.id)">
               <template #reference>
                 <el-button link type="danger" icon="Delete" :aria-label="'删除'">{{ isPhone ? '' : '删除' }}</el-button>
@@ -268,9 +277,17 @@ async function move(row, kbId) {
 }
 
 async function remove(id) {
-  await api.delete(`/documents/${id}`)
-  ElMessage.success('已删除')
+  const r = await api.delete(`/documents/${id}`)
+  if (r?.cleanupPending) ElMessage.warning('已删除，向量数据稍后由后台自动清理')
+  else ElMessage.success('已删除')
   load()
+}
+
+/** 重新处理失败的文档（使用服务器上保存的原文件） */
+async function retry(row) {
+  await api.post(`/documents/${row.id}/retry`)
+  ElMessage.success('已重新开始处理')
+  load(true)
 }
 
 onMounted(async () => {
@@ -303,7 +320,9 @@ onUnmounted(() => clearInterval(timer))
 .status.pending { color: #64748b; background: #f1f5f9; }
 .status.processing { color: #d97706; background: #fef3c7; }
 .status.processing i { animation: pulse 1s infinite; }
-.status.failed { color: #dc2626; background: #fee2e2; }
+.status.failed { color: #dc2626; background: #fee2e2; cursor: help; }
+.err-line { margin-top: 4px; font-size: 12px; color: #dc2626; line-height: 1.4; word-break: break-all;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 @keyframes pulse { 50% { opacity: .3; } }
 .up-icon { font-size: 44px; color: var(--brand); margin: 8px 0; }
 .up-text { color: var(--text-2); }

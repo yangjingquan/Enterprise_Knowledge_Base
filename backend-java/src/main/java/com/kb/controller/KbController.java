@@ -126,7 +126,7 @@ public class KbController {
     @Transactional
     public ResponseEntity<?> delete(@PathVariable Long id) {
         perm.requireAdmin();
-        long docCount = documents.selectCount(new QueryWrapper<Document>().eq("kb_id", id));
+        long docCount = documents.selectCount(new QueryWrapper<Document>().eq("kb_id", id).isNull("cleanup_status"));
         if (docCount > 0) {
             return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + docCount + " 个文档，请先删除或移走"));
         }
@@ -210,7 +210,7 @@ public class KbController {
         m.put("name", kb.getName());
         m.put("description", kb.getDescription());
         m.put("visibility", kb.getVisibility());
-        m.put("docCount", documents.selectCount(new QueryWrapper<Document>().eq("kb_id", kb.getId())));
+        m.put("docCount", documents.selectCount(new QueryWrapper<Document>().eq("kb_id", kb.getId()).isNull("cleanup_status")));
         return m;
     }
 }

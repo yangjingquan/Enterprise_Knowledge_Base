@@ -5,11 +5,15 @@
 每块带上文档 ID、文件名、页码等元数据，方便回答时标注出处。
 """
 import os
+import re
 from functools import lru_cache
 from pathlib import Path
 import unicodedata
 import pdfplumber
 from docx import Document as DocxDocument
+from docx.oxml.ns import qn
+from docx.table import Table as DocxTable
+from docx.text.paragraph import Paragraph as DocxParagraph
 from langchain_core.documents import Document
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
@@ -205,6 +209,65 @@ def _load_html(p: Path):
     return [(1, text, {})]
 
 
+_HEADING_RE = re.compile(r"^(?:heading|标题)\s*(\d)$", re.I)
+SECTION_MAX = 200     # 章节路径最长字符数（写入元数据）
+
+
+def _heading_level(para) -> int:
+    """段落的标题级别（1~9），不是标题返回 0。识别内置/中文标题样式、Title 样式和大纲级别。"""
+    name = (para.style.name if para.style is not None else "") or ""
+    m = _HEADING_RE.match(name.strip())
+    if m:
+        return int(m.group(1)) or 1
+    if name.strip().lower() in ("title", "标题"):
+        return 1
+    ppr = para._p.pPr
+    lvl = ppr.find(qn("w:outlineLvl")) if ppr is not None else None
+    if lvl is not None:
+        try:
+            v = int(lvl.get(qn("w:val")))
+            if 0 <= v <= 8:
+                return v + 1
+        except (TypeError, ValueError):
+            pass
+    return 0
+
+
+def _load_docx(p: Path):
+    """
+    按正文顺序遍历段落和表格，遇到标题时开始新章节。
+    返回 [(1, 章节文本, {"section": "一级标题 > 二级标题"})]；第一个标题之前的内容没有 section。
+    章节文本以标题行开头，便于检索命中。
+    """
+    d = DocxDocument(p)
+    out, stack, parts = [], [], []
+
+    def flush():
+        text = "\n".join(x for x in parts if x.strip())
+        if text.strip():
+            section = " > ".join(t for _, t in stack)[:SECTION_MAX]
+            out.append((1, text, {"section": section} if section else {}))
+        parts.clear()
+
+    for child in d.element.body.iterchildren():
+        if child.tag == qn("w:p"):
+            para = DocxParagraph(child, d)
+            text = para.text.strip()
+            level = _heading_level(para) if text else 0
+            if level:
+                flush()
+                while stack and stack[-1][0] >= level:
+                    stack.pop()
+                stack.append((level, text))
+            if text:
+                parts.append(para.text)
+        elif child.tag == qn("w:tbl"):
+            t = DocxTable(child, d)
+            parts.append(_table_to_md([[c.text for c in r.cells] for r in t.rows]))
+    flush()
+    return out
+
+
 def load_pages(path: str):
     """
     解析文件，返回 [(页码, 文本, 额外元数据)]。
@@ -226,12 +289,9 @@ def load_pages(path: str):
                 tables = [_table_to_md(t) for t in page.extract_tables()]
                 out.append((i, "\n\n".join([text, *[t for t in tables if t]]), {}))
         return out
-    # Word：段落 + 表格，Word 没有可靠的页码概念，统一记为第 1 页
+    # Word：没有可靠的页码概念，页码统一记为 1；按标题拆成章节，引用时显示章节路径
     if ext == "docx":
-        d = DocxDocument(p)
-        parts = [para.text for para in d.paragraphs if para.text.strip()]
-        parts += [_table_to_md([[c.text for c in r.cells] for r in t.rows]) for t in d.tables]
-        return [(1, "\n".join(parts), {})]
+        return _load_docx(p)
     if ext == "xlsx":
         return _load_xlsx(p)
     if ext == "pptx":

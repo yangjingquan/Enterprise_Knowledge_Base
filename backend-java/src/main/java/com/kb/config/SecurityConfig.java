@@ -36,6 +36,14 @@ import java.util.List;
 @Configuration
 public class SecurityConfig {
 
+    /**
+     * 允许跨域的来源，逗号分隔（环境变量 CORS_ALLOWED_ORIGINS）。
+     * 默认 "*"（开发时前端 5173 端口直连后端）；生产在 docker-compose.prod.yml 中设为 https://kb.nexbyte.top。
+     * 支持通配模式，如 https://*.example.com。
+     */
+    @org.springframework.beans.factory.annotation.Value("${kb.cors.allowed-origins:*}")
+    private String allowedOrigins;
+
     /** 密码加密器：使用 BCrypt 单向加密，校验时用 matches() 比对 */
     @Bean
     BCryptPasswordEncoder passwordEncoder() {
@@ -101,10 +109,12 @@ public class SecurityConfig {
         };
     }
 
-    /** 跨域配置：允许所有来源、方法和请求头（演示环境；生产环境应收紧为指定域名） */
+    /** 跨域配置：来源由 kb.cors.allowed-origins 决定，不在列表中的来源浏览器会拒绝跨域请求 */
     CorsConfigurationSource cors() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("*"));
+        List<String> origins = java.util.Arrays.stream(allowedOrigins.split(","))
+                .map(String::trim).filter(s -> !s.isEmpty()).toList();
+        config.setAllowedOriginPatterns(origins.isEmpty() ? List.of("*") : origins);
         config.setAllowedMethods(List.of("*"));
         config.setAllowedHeaders(List.of("*"));
 

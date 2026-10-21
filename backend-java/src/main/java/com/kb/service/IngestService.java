@@ -27,15 +27,14 @@ public class IngestService {
 
     /** 调用 Python 服务的 HTTP 客户端 */
     private final RestClient rag;
+    /** 解析入库用的长超时客户端 */
+    private final RestClient ragLong;
 
     public IngestService(DocumentMapper mapper, @Value("${kb.rag-url}") String ragUrl) {
         this.mapper = mapper;
-        // 使用 SimpleClientHttpRequestFactory（HTTP/1.1）：
-        // JDK 默认 HttpClient 会尝试 h2c 协议升级，uvicorn 不支持，会导致请求失败
-        this.rag = RestClient.builder()
-                .baseUrl(ragUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
-                .build();
+        // HTTP/1.1 客户端，连接超时 5 秒；普通接口读取 60 秒，解析入库 300 秒（见 RagHttp）
+        this.rag = RagHttp.normal(ragUrl);
+        this.ragLong = RagHttp.longRunning(ragUrl);
     }
 
     /**
@@ -52,11 +51,13 @@ public class IngestService {
 
         // 标记为处理中，前端列表会显示“处理中”
         doc.setStatus("processing");
-        mapper.updateById(doc);
+        doc.setErrorMsg(null);
+        mapper.update(null, new com.baomidou.mybatisplus.core.conditions.update.UpdateWrapper<Document>()
+                .eq("id", id).set("status", "processing").set("error_msg", null));
 
         try {
             // 调用 Python 的 /ingest 接口，返回切分出的文本块数量
-            Map<?, ?> result = rag.post()
+            Map<?, ?> result = ragLong.post()
                     .uri("/ingest")
                     .body(Map.of(
                             "document_id", id,
@@ -74,22 +75,67 @@ public class IngestService {
         } catch (Exception e) {
             log.error("文档{}处理失败", id, e);
             doc.setStatus("failed");
+            doc.setErrorMsg(failureReason(e));
+        }
+        if (mapper.selectById(id) == null) {
+            return;   // 处理期间文档已被删除，不再写回
         }
         mapper.updateById(doc);
     }
 
+    /** 把调用 Python 的异常转成用户能看懂的失败原因（写入 document.error_msg，最长 500 字） */
+    static String failureReason(Exception e) {
+        String msg;
+        if (e instanceof org.springframework.web.client.RestClientResponseException r) {
+            msg = r.getResponseBodyAsString();
+            try {
+                Object d = new com.fasterxml.jackson.databind.ObjectMapper().readValue(msg, Map.class).get("detail");
+                if (d != null) {
+                    msg = String.valueOf(d);
+                }
+            } catch (Exception ignored) {
+                // 不是 JSON 就用原文
+            }
+            if (msg == null || msg.isBlank()) {
+                msg = "解析服务返回错误 " + r.getStatusCode().value();
+            }
+        } else if (e instanceof org.springframework.web.client.ResourceAccessException) {
+            msg = "解析服务不可用或处理超时（300 秒），请稍后重试";
+        } else {
+            msg = "处理失败：" + e.getClass().getSimpleName();
+        }
+        return msg.length() > 500 ? msg.substring(0, 500) : msg;
+    }
+
     /**
-     * 删除向量库中某个文档的全部文本块。失败只记录日志，不影响数据库记录的删除。
+     * 删除向量库中某个文档的全部文本块（Chroma + BM25）。
+     * 成功返回 true；失败返回 false 并记录日志，由调用方决定是否标记"待清理"稍后重试。
      */
-    public void deleteVectors(Long id) {
+    public boolean deleteVectors(Long id) {
         try {
             rag.delete()
                     .uri("/documents/{id}", id)
                     .retrieve()
                     .toBodilessEntity();
+            return true;
         } catch (Exception e) {
-            log.warn("删除向量失败 {}", id, e);
+            log.warn("删除向量失败 {}：{}", id, e.getMessage());
+            return false;
         }
+    }
+
+    /** 向量库中出现过的全部文档 ID（用于清理孤立向量） */
+    public java.util.Set<Long> vectorDocumentIds() {
+        Map<?, ?> r = rag.get().uri("/admin/vector-docs").retrieve().body(Map.class);
+        java.util.Set<Long> ids = new java.util.TreeSet<>();
+        if (r != null && r.get("document_ids") instanceof List<?> l) {
+            for (Object o : l) {
+                if (o instanceof Number n) {
+                    ids.add(n.longValue());
+                }
+            }
+        }
+        return ids;
     }
 
     /**

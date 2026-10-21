@@ -51,4 +51,13 @@ public class Document {
 
     /** 上传人 ID */
     private Long userId;
+
+    /** 文件内容的 SHA-256（上传时计算，同一知识库内用于去重；网页导入和老数据为空） */
+    private String fileHash;
+
+    /** 处理失败的原因（status=failed 时有值） */
+    private String errorMsg;
+
+    /** 清理状态：空 = 正常；pending = 已删除但向量删除失败，等待后台重试清理（列表中不显示） */
+    private String cleanupStatus;
 }

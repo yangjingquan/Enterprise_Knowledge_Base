@@ -45,6 +45,15 @@ public class AuthController {
     }
 
     /**
+     * 健康检查：GET /api/auth/ping，无需登录（/api/auth/** 已放行），返回 {"status":"ok"}。
+     * 部署流水线通过 nginx 访问它，确认 Java 服务已启动并能经由反向代理访问。
+     */
+    @GetMapping("/ping")
+    public ResponseEntity<?> ping() {
+        return ResponseEntity.ok().header("Cache-Control", "no-store").body(Map.of("status", "ok"));
+    }
+
+    /**
      * 获取登录用公钥：GET /api/auth/public-key，返回 {publicKey(SPKI base64), nonce, expiresIn, alg}。
      * nonce 一次性、60 秒有效；登录、新建用户、重置密码前都要先取一次。
      */

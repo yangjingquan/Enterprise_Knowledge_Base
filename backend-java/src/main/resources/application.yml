@@ -14,6 +14,9 @@ kb:
   auth:
     nonce-ttl-seconds: ${AUTH_NONCE_TTL_SECONDS:60}
     ts-skew-seconds: ${AUTH_TS_SKEW_SECONDS:300}
+  # 跨域来源（逗号分隔），默认 *；生产设为 https://kb.nexbyte.top
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:*}
   # 登录限流：同一账号或 IP 连续失败次数、锁定时长
   login:
     max-fails: ${LOGIN_MAX_FAILS:5}

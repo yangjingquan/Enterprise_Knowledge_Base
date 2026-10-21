@@ -25,3 +25,6 @@ backend-python/datasets_data/
 
 # IDE 本地配置
 .idea/
+
+# 本地备份文件（如 docker-compose.yml.bak-502），不提交
+*.bak-*

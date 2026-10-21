@@ -53,6 +53,22 @@ def delete_document(document_id: int):
     bm25.index.delete_document(document_id)
 
 
+def document_ids() -> set:
+    """向量库（Chroma + BM25）中出现过的全部 document_id，分页读取元数据，不取向量和正文。"""
+    col = get_store()._collection
+    ids, offset, page = set(), 0, 1000
+    while True:
+        res = col.get(include=["metadatas"], limit=page, offset=offset)
+        metas = res.get("metadatas") or []
+        ids.update(int(m["document_id"]) for m in metas if m and m.get("document_id") is not None)
+        if len(metas) < page:
+            break
+        offset += page
+    with bm25.index._lock:
+        ids.update(int(m["document_id"]) for m in bm25.index.metas if m and m.get("document_id") is not None)
+    return ids
+
+
 def build_filter(document_id: int | None = None, kb_ids: list[int] | None = None):
     """
     组装 Chroma 的元数据过滤条件。
@@ -121,6 +137,7 @@ def get_context(document_id: int, chunk_index: int, window: int = 2):
             "page": m["page"],
             "sheet_name": m.get("sheet_name"),
             "slide_title": m.get("slide_title"),
+            "section": m.get("section"),
             "text": t,
         }
         for t, m in zip(res["documents"], res["metadatas"])

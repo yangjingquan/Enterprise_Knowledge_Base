@@ -29,7 +29,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { md } from '../markdown'
+import { md, sanitize } from '../markdown'
 import PageHeader from '../components/PageHeader.vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
@@ -76,7 +76,7 @@ function cardify(html) {
 }
 const reportHtml = computed(() => {
   const html = md(status.value.report || '')
-  return isCompact.value ? cardify(html) : html
+  return isCompact.value ? sanitize(cardify(html)) : html
 })
 let timer
 

@@ -86,10 +86,8 @@ public class QaController {
         this.perm = perm;
         this.ragUrl = ragUrl;
         // 使用 HTTP/1.1，避免 h2c 升级被 uvicorn 拒绝
-        this.rag = RestClient.builder()
-                .baseUrl(ragUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
-                .build();
+        // 问答（含检索、重排、大模型生成）可能较慢，用长超时（读取 300 秒）
+        this.rag = com.kb.service.RagHttp.longRunning(ragUrl);
     }
 
     /**
@@ -144,6 +142,9 @@ public class QaController {
         StreamingResponseBody out = os -> {
             // 用 HttpURLConnection 直接读取 Python 的流式响应
             HttpURLConnection conn = (HttpURLConnection) URI.create(ragUrl + "/ask/stream").toURL().openConnection();
+            conn.setConnectTimeout(com.kb.service.RagHttp.CONNECT_TIMEOUT_MS);
+            // 读取超时是"两次收到数据之间"的最长等待，流式问答 300 秒
+            conn.setReadTimeout(com.kb.service.RagHttp.LONG_TIMEOUT_MS);
             conn.setRequestMethod("POST");
             conn.setDoOutput(true);
             conn.setRequestProperty("Content-Type", "application/json");
@@ -311,6 +312,11 @@ public class QaController {
         // 问数：模式 + 有权限的已就绪数据集元数据（指定文档时只做文档问答）
         Object mode = req.get("mode");
         body.put("mode", mode == null ? "auto" : String.valueOf(mode));
+        // 检索方式：vector / hybrid / rerank，其他值（含不传）交给 Python 使用默认方式
+        Object rm = req.get("retrievalMode");
+        if (rm != null && java.util.Set.of("vector", "hybrid", "rerank").contains(String.valueOf(rm))) {
+            body.put("retrieval_mode", String.valueOf(rm));
+        }
         List<Long> dsIds = null;
         if (req.get("datasetIds") instanceof List<?> l && !l.isEmpty()) {
             dsIds = l.stream().filter(x -> x instanceof Number).map(x -> ((Number) x).longValue()).toList();

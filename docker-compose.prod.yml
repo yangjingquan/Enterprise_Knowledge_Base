@@ -63,6 +63,8 @@ services:
       DB_PORT: "3306"
       DB_NAME: ai_kb
       RAG_URL: http://ai-kb-py:8000
+      # 只允许本系统域名跨域（同域访问不受影响）
+      CORS_ALLOWED_ORIGINS: https://kb.nexbyte.top
       UPLOAD_DIR: /data/uploads
       TZ: Asia/Shanghai
     volumes:

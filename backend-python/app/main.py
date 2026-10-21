@@ -60,6 +60,8 @@ class AskReq(BaseModel):
     kb_ids: list[int] | None = None
     # 问数：auto 自动判断 / doc 文档问答 / data 数据分析；datasets 为 Java 按权限查好的数据集元数据
     mode: str = "auto"
+    # 检索方式：vector / hybrid / rerank；不传或取值无效时用服务端默认（retrieval.DEFAULT_MODE）
+    retrieval_mode: str | None = None
     datasets: list[dict] = []
     dataset_ids: list[int] | None = None
 
@@ -126,12 +128,22 @@ def ingest(req: ParseReq):
     所以这里用一把全局锁让入库串行执行（INGEST_SERIAL=false 可关闭）。
     """
     with _INGEST_LOCK:
-        chunks = split_document(req.file_path, req.document_id, req.file_name)
-        ocr_pages = len({c.metadata["page"] for c in chunks if c.metadata.get("ocr")})
-        return {
-            "chunk_count": vectorstore.add_chunks(req.document_id, chunks, req.kb_id),
-            "ocr_pages": ocr_pages,   # 通过 OCR 识别的页数，前端显示“OCR”标记
-        }
+        try:
+            chunks = split_document(req.file_path, req.document_id, req.file_name)
+            if not chunks:
+                raise ValueError("没有从文件中提取到文字（可能是空文件、加密文件或图片未开启 OCR）")
+            ocr_pages = len({c.metadata["page"] for c in chunks if c.metadata.get("ocr")})
+            return {
+                "chunk_count": vectorstore.add_chunks(req.document_id, chunks, req.kb_id),
+                "ocr_pages": ocr_pages,   # 通过 OCR 识别的页数，前端显示“OCR”标记
+            }
+        except FileNotFoundError as e:
+            raise HTTPException(422, "原文件不存在，请删除后重新上传") from e
+        except ValueError as e:
+            raise HTTPException(422, str(e)[:300]) from e
+        except Exception as e:   # 文件损坏、格式异常、向量服务出错等：把原因返回给 Java 记录到 error_msg
+            log.exception("ingest failed: %s", req.document_id)
+            raise HTTPException(422, f"解析失败：{e.__class__.__name__}: {str(e)[:250]}") from e
 
 
 @app.post("/kb-sync")
@@ -146,6 +158,12 @@ def delete_doc(document_id: int):
     """删除某个文档在向量库中的全部文本块。"""
     vectorstore.delete_document(document_id)
     return {"ok": True}
+
+
+@app.get("/admin/vector-docs")
+def vector_docs():
+    """向量库中出现过的全部文档 ID（Java 据此找出数据库中已不存在的孤立向量）。"""
+    return {"document_ids": sorted(vectorstore.document_ids())}
 
 
 @app.post("/fetch-url")
@@ -258,8 +276,15 @@ def _events(req: "AskReq", mode: str, history: list):
     if mode == "data":
         return nl2sql.analyze(req.question, req.datasets, req.dataset_ids, history)
     if mode == "mixed":
-        return mixed.answer_stream(req.question, req.datasets, req.dataset_ids, history, req.document_id, req.kb_ids)
-    return rag.answer_stream(req.question, req.document_id, history, kb_ids=req.kb_ids)
+        return mixed.answer_stream(req.question, req.datasets, req.dataset_ids, history, req.document_id, req.kb_ids,
+                                   retrieval_mode=_rmode(req))
+    return rag.answer_stream(req.question, req.document_id, history, kb_ids=req.kb_ids, mode=_rmode(req))
+
+
+def _rmode(req: "AskReq"):
+    """请求指定的检索方式，取值无效时返回 None（使用默认）"""
+    m = (req.retrieval_mode or "").strip().lower()
+    return m if m in retrieval.MODES else None
 
 
 def _route(req: "AskReq") -> str:
@@ -275,7 +300,7 @@ def ask(req: AskReq):
     history = [h.model_dump() for h in req.history]
     mode = _route(req)
     if mode == "doc":
-        out = rag.answer(req.question, req.document_id, history, kb_ids=req.kb_ids)
+        out = rag.answer(req.question, req.document_id, history, kb_ids=req.kb_ids, mode=_rmode(req))
         out["mode"] = "doc"
         return out
     answer, analysis, sources, rewritten = [], {}, [], req.question

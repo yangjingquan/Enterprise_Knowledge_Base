@@ -144,11 +144,15 @@ pipeline {
             [ "$s" = healthy ] && break; sleep 5
           done
           [ "$s" = healthy ]
-          for i in $(seq 1 40); do
-            code=$(docker exec shop-nginx wget -S -qO /dev/null --no-check-certificate --header='Host: kb.nexbyte.top' https://127.0.0.1/api/auth/ping 2>&1 | awk '/HTTP\\//{print $2}' | tail -1 || true)
-            docker logs ai-kb-backend-java 2>&1 | grep -q 'Started KbApplication' && break; sleep 5
+          # 经 shop-nginx → 前端 nginx → Java 访问无需登录的 /api/auth/ping，最多等 90 秒，失败则部署失败
+          ok=0
+          for i in $(seq 1 18); do
+            if docker exec shop-nginx wget -qO- -T 5 --no-check-certificate --header='Host: kb.nexbyte.top' https://127.0.0.1/api/auth/ping 2>/dev/null | grep -q '"status":"ok"'; then
+              ok=1; break
+            fi
+            sleep 5
           done
-          docker logs ai-kb-backend-java 2>&1 | grep -q 'Started KbApplication'
+          if [ "$ok" != 1 ]; then echo 'Verify failed: /api/auth/ping not ok within 90s'; exit 1; fi
           docker exec shop-nginx wget -qO /dev/null --no-check-certificate --header='Host: kb.nexbyte.top' https://127.0.0.1/
           docker stats --no-stream --format '{{.Name}} {{.MemUsage}}' ai-kb-backend-python ai-kb-backend-java ai-kb-frontend
         '''

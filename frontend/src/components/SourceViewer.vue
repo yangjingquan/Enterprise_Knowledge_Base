@@ -95,6 +95,8 @@ const title = computed(() => `原文查看 · ${source.value.file_name || ''}`)
 const locationText = computed(() => {
   const s = source.value
   if (s.sheet_name) return `工作表「${s.sheet_name}」`
+  if (s.section) return `章节「${s.section}」`
+  if ((doc.value?.fileType || '') === 'docx') return 'Word 文档'
   if ((doc.value?.fileType || '') === 'pptx') return `第 ${s.page} 张幻灯片${s.slide_title ? '：' + s.slide_title : ''}`
   if ((doc.value?.fileType || '') === 'url') return '网页正文'
   return `第 ${s.page} 页`
@@ -103,6 +105,7 @@ const locationText = computed(() => {
 function chunkLabel(c) {
   if (c.sheet_name) return `工作表「${c.sheet_name}」· 片段 #${c.chunk_index + 1}`
   if ((doc.value?.fileType || '') === 'pptx') return `第 ${c.page} 张幻灯片 · 片段 #${c.chunk_index + 1}`
+  if (c.section) return `章节「${c.section}」· 片段 #${c.chunk_index + 1}`
   return `片段 #${c.chunk_index + 1}`
 }
 

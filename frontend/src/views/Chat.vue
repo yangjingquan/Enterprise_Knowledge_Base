@@ -35,6 +35,14 @@
                  class="kb-select ds-select" placeholder="全部数据集（可选）" clearable>
         <el-option v-for="d in scopedDatasets" :key="d.id" :label="d.name" :value="d.id" />
       </el-select>
+      <div class="sec-title"><el-icon><Search /></el-icon>检索方式</div>
+      <!-- 默认使用服务端配置（通常为混合 + 重排序）；可临时切换用于对比效果 -->
+      <el-select v-model="retrievalMode" size="small" class="kb-select" data-test="retrieval-mode">
+        <el-option label="默认（服务端配置）" value="" />
+        <el-option label="仅向量" value="vector" />
+        <el-option label="混合（向量 + 关键词）" value="hybrid" />
+        <el-option label="混合 + 重排序" value="rerank" />
+      </el-select>
       <div class="sec-title"><el-icon><Files /></el-icon>文档范围<span class="cnt">{{ scopedDocs.length }}</span></div>
       <el-scrollbar class="doc-scroll">
         <div :class="['doc', { on: docId === null }]" @click="pickDoc(null)">
@@ -189,6 +197,7 @@ function pickDoc(id) {
   sideOpen.value = false
 }
 const mode = ref('auto')          // auto | doc | data
+const retrievalMode = ref('')     // '' 默认 | vector | hybrid | rerank
 const datasets = ref([])
 const datasetIds = ref([])
 const msgs = ref([])
@@ -259,12 +268,14 @@ function buildHistory() {
   return out.slice(-MAX_HISTORY_ROUNDS)
 }
 
-/** 来源位置描述：Excel 显示工作表，PPT 显示幻灯片，其他显示页码 */
+/** 来源位置描述：Excel 显示工作表，Word 显示章节，PPT 显示幻灯片，其他显示页码 */
 function sourceLocation(s) {
   if (s.sheet_name) return `工作表「${s.sheet_name}」`
+  if (s.section) return `章节「${s.section}」`
   if (/\.pptx$/i.test(s.file_name)) return `第${s.page}张幻灯片`
   const d = docs.value.find(x => x.id === s.document_id)
   if (d?.fileType === 'url') return '网页'
+  if (d?.fileType === 'docx' || /\.docx$/i.test(s.file_name)) return 'Word 文档'
   return `第${s.page}页`
 }
 
@@ -308,6 +319,7 @@ async function ask(text, opts = {}) {
         sessionId: sessionId.value,
         history,
         mode: docId.value ? 'doc' : (opts.mode || mode.value),
+        retrievalMode: retrievalMode.value || undefined,
         datasetIds: opts.datasetIds || (datasetIds.value.length ? datasetIds.value : null),
       }),
     })

@@ -26,10 +26,8 @@ public class EvalController {
 
     public EvalController(PermissionService perm, @Value("${kb.rag-url}") String ragUrl) {
         this.perm = perm;
-        this.rag = RestClient.builder()
-                .baseUrl(ragUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory())
-                .build();
+        // 评测在 Python 后台线程执行，这里只是启动和查询状态，用普通超时
+        this.rag = com.kb.service.RagHttp.normal(ragUrl);
     }
 
     @PostMapping("/run")

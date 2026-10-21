@@ -41,7 +41,11 @@ public class SchemaMigration implements ApplicationRunner {
             new String[]{"user", "enabled", "TINYINT DEFAULT 1 COMMENT '1启用 0停用'"},
             // ---- 问数 ----
             new String[]{"qa_history", "mode", "VARCHAR(10) NULL COMMENT 'doc 文档问答 / data 数据分析 / mixed 混合'"},
-            new String[]{"qa_history", "analysis", "JSON NULL COMMENT '数据分析快照'"}
+            new String[]{"qa_history", "analysis", "JSON NULL COMMENT '数据分析快照'"},
+            // ---- 文档去重、失败原因、删除清理 ----
+            new String[]{"document", "file_hash", "VARCHAR(64) NULL COMMENT '文件SHA-256，同库去重'"},
+            new String[]{"document", "error_msg", "VARCHAR(500) NULL COMMENT '处理失败原因'"},
+            new String[]{"document", "cleanup_status", "VARCHAR(20) NULL COMMENT 'pending=向量待清理'"}
     );
 
     /** 默认知识库名称：升级前上传的文档都归入这里，所有登录用户可见 */
@@ -100,6 +104,7 @@ public class SchemaMigration implements ApplicationRunner {
         addIndexIfMissing("qa_history", "idx_qa_session", "session_id");
         addIndexIfMissing("qa_history", "idx_qa_user", "user_id");
         addIndexIfMissing("document", "idx_doc_kb", "kb_id");
+        addIndexIfMissing("document", "idx_doc_hash", "file_hash");
 
         // 3. 默认知识库：不存在就创建（公开），升级前没有知识库的文档全部归入
         jdbc.update("INSERT IGNORE INTO kb (name, description, visibility) VALUES (?, ?, 'public')",

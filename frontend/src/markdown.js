@@ -1,5 +1,6 @@
 // Markdown 渲染 + 代码高亮（只注册常用语言，控制体积）
 import { marked } from 'marked'
+import DOMPurify from 'dompurify'
 import hljs from 'highlight.js/lib/core'
 import java from 'highlight.js/lib/languages/java'
 import python from 'highlight.js/lib/languages/python'
@@ -21,4 +22,18 @@ renderer.code = (code, lang) => {
 }
 marked.setOptions({ renderer, breaks: true, gfm: true })
 
-export const md = t => marked.parse(t || '')
+// 大模型回答、文档片段、评测报告都可能夹带 HTML：渲染后统一用 DOMPurify 净化，
+// 只保留 Markdown 常用标签（表格、代码、列表、链接等），去掉 script / on* 事件 / javascript: 链接 / iframe 等
+const PURIFY = {
+  USE_PROFILES: { html: true },
+  FORBID_TAGS: ['style', 'form', 'input', 'button', 'textarea', 'select', 'iframe', 'object', 'embed', 'svg', 'math'],
+  FORBID_ATTR: ['style'],
+}
+DOMPurify.addHook('afterSanitizeAttributes', node => {
+  if (node.tagName === 'A' && node.getAttribute('href')) {
+    node.setAttribute('target', '_blank')
+    node.setAttribute('rel', 'noopener noreferrer')
+  }
+})
+export const sanitize = html => DOMPurify.sanitize(html || '', PURIFY)
+export const md = t => sanitize(marked.parse(t || ''))

@@ -157,7 +157,9 @@ function sources(row) {
 
 function loc(s) {
   if (s.sheet_name) return `工作表「${s.sheet_name}」`
+  if (s.section) return `章节「${s.section}」`
   if (/\.pptx$/i.test(s.file_name)) return `第${s.page}张幻灯片`
+  if (/\.docx$/i.test(s.file_name)) return 'Word 文档'
   return `第${s.page}页`
 }
 

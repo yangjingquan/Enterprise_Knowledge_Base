@@ -47,7 +47,7 @@ public class KbSyncRunner implements ApplicationRunner {
     private void syncWithRetry() {
         Map<Long, Long> mapping = new HashMap<>();
         for (Document d : documents.selectList(null)) {
-            if (d.getKbId() != null && "ready".equals(d.getStatus())) {
+            if (d.getKbId() != null && "ready".equals(d.getStatus()) && d.getCleanupStatus() == null) {
                 mapping.put(d.getId(), d.getKbId());
             }
         }

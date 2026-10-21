@@ -40,6 +40,7 @@ public class DatasetService {
     private final DatasetBlockMapper blocks;
     private final TransactionTemplate tx;
     private final RestClient rag;
+    private final RestClient ragLong;
     private final ObjectMapper json = new ObjectMapper();
 
     public DatasetService(DatasetMapper datasets, DatasetTableMapper tables, DatasetColumnMapper columns,
@@ -49,8 +50,9 @@ public class DatasetService {
         this.columns = columns;
         this.blocks = blocks;
         this.tx = tx;
-        this.rag = RestClient.builder().baseUrl(ragUrl)
-                .requestFactory(new SimpleClientHttpRequestFactory()).build();
+        this.rag = RagHttp.normal(ragUrl);
+        // 解析 / 重新识别数据块 / 导入可能处理大文件，用长超时
+        this.ragLong = RagHttp.longRunning(ragUrl);
     }
 
     /** 把 Python 返回的 {"detail": "..."} 错误转成可读的提示 */
@@ -86,7 +88,7 @@ public class DatasetService {
         ds.setStatus("parsing");
         datasets.updateById(ds);
         try {
-            rag.post().uri("/datasets/analyze")
+            ragLong.post().uri("/datasets/analyze")
                     .body(Map.of("dataset_id", id, "file_path", ds.getFilePath(),
                             "file_type", ds.getFileType(), "title", ds.getName()))
                     .retrieve().body(Map.class);
@@ -111,7 +113,7 @@ public class DatasetService {
         Map<String, Object> body = new HashMap<>(req);
         body.put("file_path", ds.getFilePath());
         body.put("file_type", ds.getFileType());
-        return rag.post().uri("/datasets/{id}/block", ds.getId()).body(body).retrieve().body(Map.class);
+        return ragLong.post().uri("/datasets/{id}/block", ds.getId()).body(body).retrieve().body(Map.class);
     }
 
     public Map<?, ?> preview(Long id, String table, int limit) {
@@ -128,7 +130,7 @@ public class DatasetService {
             return;
         }
         try {
-            Map<?, ?> result = rag.post().uri("/datasets/ingest")
+            Map<?, ?> result = ragLong.post().uri("/datasets/ingest")
                     .body(Map.of("dataset_id", id, "file_path", ds.getFilePath(),
                             "file_type", ds.getFileType(), "plan", plan))
                     .retrieve().body(Map.class);

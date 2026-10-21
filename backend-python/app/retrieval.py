@@ -36,6 +36,8 @@ RRF_K = 60
 BM25_KEEP_RANK = 3
 
 DEFAULT_MODE = os.getenv("RETRIEVAL_MODE", "rerank" if reranker.enabled() else "hybrid")
+# 可选的检索方式（问答请求可通过 retrieval_mode 指定）
+MODES = ("vector", "hybrid", "rerank")
 
 
 def retrieve(question: str, k: int, document_id=None, kb_ids=None, mode: str | None = None):
@@ -43,9 +45,12 @@ def retrieve(question: str, k: int, document_id=None, kb_ids=None, mode: str | N
     检索入口。返回 [(Document, 展示分数, 详情)]，按相关度从高到低。
     详情包含 vector_score、bm25_rank、rerank_score，便于调试和评测。
     """
-    mode = mode or DEFAULT_MODE
+    requested = mode
+    mode = mode if mode in MODES else DEFAULT_MODE
     if mode == "rerank" and not reranker.enabled():
         mode = "hybrid"
+    # 便于在容器日志中确认实际使用的检索方式
+    print(f"[retrieve] requested_mode={requested or '-'} mode={mode} k={k}", flush=True)
     if kb_ids is not None and len(kb_ids) == 0:
         return []   # 用户没有任何知识库权限
 

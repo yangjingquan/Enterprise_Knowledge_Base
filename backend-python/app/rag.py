@@ -138,6 +138,8 @@ def _retrieve(question: str, document_id: int | None, k: int, kb_ids=None, mode=
             # Excel 的工作表名、PPT 的幻灯片标题（其他格式为空）
             "sheet_name": meta.get("sheet_name"),
             "slide_title": meta.get("slide_title"),
+            # Word 文档的章节路径（按标题识别，新上传的 Word 才有）
+            "section": meta.get("section"),
             # 是否来自 OCR 识别（扫描件）
             "ocr": bool(meta.get("ocr")),
             # 各路检索的分数明细：向量相似度、BM25 名次、重排分数
@@ -148,9 +150,11 @@ def _retrieve(question: str, document_id: int | None, k: int, kb_ids=None, mode=
 
 
 def _location(x: dict) -> str:
-    """来源位置描述：Excel 显示工作表名，PPT 显示第几张幻灯片，其他显示页码。"""
+    """来源位置描述：Excel 显示工作表名，Word 显示章节，PPT 显示第几张幻灯片，其他显示页码。"""
     if x.get("sheet_name"):
         return f"工作表「{x['sheet_name']}」"
+    if x.get("section"):
+        return f"章节「{x['section']}」"
     name = x["file_name"].lower()
     if name.endswith(".pptx"):
         return f"第{x['page']}张幻灯片"
@@ -195,7 +199,7 @@ def answer(question: str, document_id: int | None = None, history=None, k: int =
 
 
 def answer_stream(question: str, document_id: int | None = None, history=None, k: int = TOP_K,
-                  kb_ids=None):
+                  kb_ids=None, mode=None):
     """
     流式问答（生成器）：
       rewrite（改写后的问题，仅多轮时）→ sources（引用片段）→ 多个 delta（答案文字片段）。
@@ -205,7 +209,7 @@ def answer_stream(question: str, document_id: int | None = None, history=None, k
     if standalone != question:
         yield {"type": "rewrite", "data": standalone}
 
-    sources = _retrieve(standalone, document_id, k, kb_ids)
+    sources = _retrieve(standalone, document_id, k, kb_ids, mode)
     yield {"type": "sources", "data": sources}
 
     if not sources:
