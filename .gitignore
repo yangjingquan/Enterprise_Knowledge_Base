@@ -18,6 +18,7 @@ frontend/public/pdfjs/
 *.tgz
 .DS_Store
 hf_cache/
+demo-data/*.png
 
 # 数据集 DuckDB 文件
 datasets_data/
