@@ -87,6 +87,32 @@ public class DemoDataSeeder implements ApplicationRunner {
         }
         Long brokerId = broker.getId();
 
+        // 旧库治愈：已存在但未归属的演示账号/知识库挂到 DEMO（SchemaMigration 也会做全量孤儿迁移）
+        for (User orphan : users.selectList(new QueryWrapper<User>()
+                .isNull("broker_id").ne("username", "admin"))) {
+            orphan.setBrokerId(brokerId);
+            users.updateById(orphan);
+            log.info("演示数据：治愈用户 {} → DEMO", orphan.getUsername());
+        }
+        if (users.selectCount(new QueryWrapper<User>().eq("username", "broker01")) > 0) {
+            User ba0 = users.selectOne(new QueryWrapper<User>().eq("username", "broker01"));
+            if (ba0 != null && ba0.getBrokerId() == null) {
+                ba0.setBrokerId(brokerId);
+                if (ba0.getRole() == null || "user".equals(ba0.getRole()) || "admin".equals(ba0.getRole())) {
+                    ba0.setRole("broker_admin");
+                }
+                users.updateById(ba0);
+            }
+        }
+        for (String[] k : KBS) {
+            Kb orphanKb = kbs.selectOne(new QueryWrapper<Kb>().eq("name", k[0]).isNull("broker_id"));
+            if (orphanKb != null) {
+                orphanKb.setBrokerId(brokerId);
+                kbs.updateById(orphanKb);
+                log.info("演示数据：治愈知识库「{}」→ DEMO", k[0]);
+            }
+        }
+
         if (users.selectCount(new QueryWrapper<User>().eq("username", "broker01")) == 0) {
             User ba = new User();
             ba.setUsername("broker01");

@@ -9,6 +9,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * 数据库结构自动升级（幂等）。
@@ -113,10 +114,31 @@ public class SchemaMigration implements ApplicationRunner {
         // 复合唯一：同一客户内名称不重复（broker_id 为 NULL 的存量允许多条）
         addUniqueIndexIfMissing("kb", "uk_kb_broker_name", "broker_id, name");
 
-        jdbc.update("INSERT IGNORE INTO kb (name, description, visibility) VALUES (?, ?, 'public')",
-                DEFAULT_KB, "全员可见的通用资料；系统升级前上传的文档自动归入此库");
-        Long defaultKb = jdbc.queryForObject("SELECT id FROM kb WHERE name = ? AND broker_id IS NULL LIMIT 1",
-                Long.class, DEFAULT_KB);
+        // 仅当尚不存在同名知识库时创建默认库（uk 改为客户内唯一后，INSERT IGNORE 对 NULL broker_id 不再幂等）
+        Integer defaultKbCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM kb WHERE name = ?", Integer.class, DEFAULT_KB);
+        if (defaultKbCount == null || defaultKbCount == 0) {
+            jdbc.update("INSERT INTO kb (name, description, visibility) VALUES (?, ?, 'public')",
+                    DEFAULT_KB, "全员可见的通用资料；系统升级前上传的文档自动归入此库");
+            log.info("数据库升级：创建默认知识库「{}」", DEFAULT_KB);
+        }
+        Long defaultKb = null;
+        try {
+            defaultKb = jdbc.queryForObject(
+                    "SELECT id FROM kb WHERE name = ? AND broker_id IS NULL ORDER BY id LIMIT 1",
+                    Long.class, DEFAULT_KB);
+        } catch (Exception ignored) {
+            // none
+        }
+        if (defaultKb == null) {
+            try {
+                defaultKb = jdbc.queryForObject(
+                        "SELECT id FROM kb WHERE name = ? ORDER BY id LIMIT 1",
+                        Long.class, DEFAULT_KB);
+            } catch (Exception ignored) {
+                // none
+            }
+        }
         if (defaultKb != null) {
             int moved = jdbc.update("UPDATE document SET kb_id = ? WHERE kb_id IS NULL", defaultKb);
             if (moved > 0) {
@@ -127,6 +149,81 @@ public class SchemaMigration implements ApplicationRunner {
         jdbc.update("UPDATE user SET display_name = ? WHERE username = ? AND (display_name IS NULL OR display_name = ?)",
                 "系统管理员", "admin", "");
         jdbc.update("UPDATE broker SET token_version = 0 WHERE token_version IS NULL");
+
+        // 存量未归属数据迁入 DEMO 客户（幂等；生产关闭演示种子时仍会执行）
+        migrateOrphansToDemo();
+    }
+
+    /**
+     * 确保存在编码 DEMO 的客户，并将 broker_id 为空的用户（除 admin）与知识库划归该客户。
+     * 若目标客户下已有同名知识库，先将孤儿库改名为「原名-迁移{id}」再归属，避免唯一约束失败。
+     */
+    private void migrateOrphansToDemo() {
+        final String demoCode = "DEMO";
+        Long demoId = null;
+        try {
+            demoId = jdbc.queryForObject(
+                    "SELECT id FROM broker WHERE code = ? LIMIT 1", Long.class, demoCode);
+        } catch (Exception ignored) {
+            // empty
+        }
+        if (demoId == null) {
+            jdbc.update(
+                    "INSERT INTO broker (name, code, enabled, token_version, create_time, update_time) "
+                            + "VALUES (?, ?, 1, 0, NOW(), NOW())",
+                    "演示客户", demoCode);
+            demoId = jdbc.queryForObject(
+                    "SELECT id FROM broker WHERE code = ? LIMIT 1", Long.class, demoCode);
+            log.info("数据迁移：创建客户 {}（id={}）", demoCode, demoId);
+        }
+        if (demoId == null) {
+            log.warn("数据迁移：无法确保 DEMO 客户存在，跳过孤儿归属");
+            return;
+        }
+
+        int usersMoved = jdbc.update(
+                "UPDATE user SET broker_id = ? WHERE broker_id IS NULL AND username <> 'admin'",
+                demoId);
+
+        List<Map<String, Object>> orphans = jdbc.queryForList(
+                "SELECT id, name FROM kb WHERE broker_id IS NULL ORDER BY id");
+        int kbsMoved = 0;
+        int kbsRenamed = 0;
+        for (Map<String, Object> row : orphans) {
+            Long kbId = ((Number) row.get("id")).longValue();
+            String name = String.valueOf(row.get("name"));
+            Integer clash = jdbc.queryForObject(
+                    "SELECT COUNT(*) FROM kb WHERE broker_id = ? AND name = ?",
+                    Integer.class, demoId, name);
+            String assignName = name;
+            if (clash != null && clash > 0) {
+                assignName = name + "-迁移" + kbId;
+                // 极端情况：改名后仍冲突则再拼后缀
+                int n = 0;
+                while (true) {
+                    Integer again = jdbc.queryForObject(
+                            "SELECT COUNT(*) FROM kb WHERE broker_id = ? AND name = ?",
+                            Integer.class, demoId, assignName);
+                    if (again == null || again == 0) {
+                        break;
+                    }
+                    n++;
+                    assignName = name + "-迁移" + kbId + "-" + n;
+                }
+                jdbc.update("UPDATE kb SET name = ? WHERE id = ?", assignName, kbId);
+                kbsRenamed++;
+                log.info("数据迁移：知识库 id={} 原名「{}」与 DEMO 重名，改名为「{}」", kbId, name, assignName);
+            }
+            jdbc.update("UPDATE kb SET broker_id = ? WHERE id = ? AND broker_id IS NULL", demoId, kbId);
+            kbsMoved++;
+        }
+
+        if (usersMoved > 0 || kbsMoved > 0) {
+            log.info("数据迁移：已将 {} 个用户、{} 个知识库（其中 {} 个因重名改名）归属到客户 {}",
+                    usersMoved, kbsMoved, kbsRenamed, demoCode);
+        } else {
+            log.info("数据迁移：无待归属的孤儿用户/知识库（DEMO id={}）", demoId);
+        }
     }
 
     private void addColumnIfMissing(String table, String column, String definition) {
