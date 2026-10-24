@@ -13,7 +13,7 @@ import org.springframework.web.client.RestClient;
 import java.util.Map;
 
 /**
- * 效果评测接口（仅管理员）：转发给 Python 的评测服务。
+ * 效果评测接口（仅客户管理员）：转发给 Python 的评测服务。
  * - POST /api/admin/eval/run    启动评测（后台执行，约需数分钟），请求体 {"judge": false}
  * - GET  /api/admin/eval/status 查询进度和最近一次的评测报告（Markdown）
  */
@@ -32,7 +32,7 @@ public class EvalController {
 
     @PostMapping("/run")
     public Map<?, ?> run(@RequestBody(required = false) Map<String, Object> req) {
-        perm.requireAdmin();
+        perm.requireBrokerAdmin();
         return rag.post()
                 .uri("/eval/run")
                 .body(req == null ? Map.of() : req)
@@ -42,7 +42,7 @@ public class EvalController {
 
     @GetMapping("/status")
     public Map<?, ?> status() {
-        perm.requireAdmin();
+        perm.requireBrokerAdmin();
         return rag.get()
                 .uri("/eval/status")
                 .retrieve()

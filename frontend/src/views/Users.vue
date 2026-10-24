@@ -3,39 +3,39 @@
 -->
 <template>
   <div class="page">
-    <PageHeader title="用户管理" icon="User" desc="创建账号、设置角色与状态、分配各知识库的访问权限">
+    <PageHeader title="用户管理" icon="User" desc="创建本客户普通用户、启停与重置密码、分配本客户知识库权限">
       <el-button type="primary" icon="Plus" @click="edit()">新建用户</el-button>
     </PageHeader>
     <div class="panel panel-pad">
     <div class="toolbar-row filter">
       <el-input v-model="keyword" placeholder="搜索用户名 / 显示名称" prefix-icon="Search" clearable class="kw" />
-      <span class="muted">共 {{ list.length }} 个用户，其中管理员 {{ list.filter(u => u.role === 'admin').length }} 个</span>
+      <span class="muted">共 {{ list.length }} 个用户，其中客户管理员 {{ list.filter(u => u.role === 'broker_admin').length }} 个</span>
     </div>
     <el-table :data="shown" v-loading="loading">
       <el-table-column label="用户" :min-width="isNarrow ? 170 : 220">
         <template #default="{ row }">
           <div class="who">
-            <el-avatar :size="36" :class="row.role === 'admin' ? 'av-admin' : 'av-user'">{{ (row.displayName || row.username).slice(0, 1) }}</el-avatar>
+            <el-avatar :size="36" :class="row.role === 'broker_admin' ? 'av-admin' : 'av-user'">{{ (row.displayName || row.username).slice(0, 1) }}</el-avatar>
             <div><b>{{ row.displayName || row.username }}</b><span>{{ row.username }} · ID {{ row.id }}</span></div>
           </div>
           <!-- 手机 / 平板：角色和知识库权限合并到这里 -->
           <div v-if="isNarrow" class="meta-line grants-line">
-            <el-tag :type="row.role === 'admin' ? 'danger' : ''" size="small">{{ row.role === 'admin' ? '系统管理员' : '普通用户' }}</el-tag>
-            <span v-if="row.role === 'admin'">全部知识库</span>
+            <el-tag :type="row.role === 'broker_admin' ? 'warning' : ''" size="small">{{ row.role === 'broker_admin' ? '客户管理员' : '普通用户' }}</el-tag>
+            <span v-if="row.role === 'broker_admin'">本客户全部知识库</span>
             <el-tag v-for="g in row.grants" :key="g.kbId" size="small" :type="g.role === 'editor' ? 'warning' : 'info'">{{ g.kbName }} · {{ ROLE_NAMES[g.role] }}</el-tag>
           </div>
         </template>
       </el-table-column>
       <el-table-column v-if="!isNarrow" label="角色" width="100">
         <template #default="{ row }">
-          <el-tag :type="row.role === 'admin' ? 'danger' : ''" size="small">
-            {{ row.role === 'admin' ? '系统管理员' : '普通用户' }}
+          <el-tag :type="row.role === 'broker_admin' ? 'warning' : ''" size="small">
+            {{ row.role === 'broker_admin' ? '客户管理员' : '普通用户' }}
           </el-tag>
         </template>
       </el-table-column>
       <el-table-column v-if="!isNarrow" label="知识库权限">
         <template #default="{ row }">
-          <span v-if="row.role === 'admin'" class="muted">全部知识库</span>
+          <span v-if="row.role === 'broker_admin'" class="muted">本客户全部知识库</span>
           <el-tag v-for="g in row.grants" :key="g.kbId" size="small" class="grant" :type="g.role === 'editor' ? 'warning' : 'info'">
             {{ g.kbName }} · {{ ROLE_NAMES[g.role] }}
           </el-tag>
@@ -65,12 +65,10 @@
           <el-input v-model="form.password" type="password" show-password :placeholder="form.id ? '不修改请留空' : '至少 6 位'" />
         </el-form-item>
         <el-form-item label="角色">
-          <el-radio-group v-model="form.role">
-            <el-radio value="user">普通用户</el-radio>
-            <el-radio value="admin">系统管理员</el-radio>
-          </el-radio-group>
+          <el-tag>{{ form.role === 'broker_admin' ? '客户管理员' : '普通用户' }}</el-tag>
+          <span class="muted" style="margin-left:8px">客户管理员由超级管理员指定</span>
         </el-form-item>
-        <el-form-item v-if="form.role !== 'admin'" label="知识库权限">
+        <el-form-item v-if="form.role === 'user'" label="知识库权限">
           <div class="grants">
             <div v-for="k in kbs" :key="k.id" class="grant-row">
               <span class="kb-name">{{ k.name }}<el-tag v-if="k.visibility === 'public'" size="small" type="success">公开</el-tag></span>
@@ -139,7 +137,7 @@ async function save() {
   const grants = Object.entries(form.grants)
     .filter(([, role]) => role)
     .map(([kbId, role]) => ({ kbId: Number(kbId), role }))
-  const body = { displayName: form.displayName, role: form.role, grants }
+  const body = { displayName: form.displayName, grants: form.role === 'user' ? grants : undefined }
   // 新密码只以 RSA-OAEP 密文提交；编辑时留空表示不修改
   if (form.password) {
     if (form.password.length < 6) return ElMessage.warning('密码至少 6 位')
@@ -155,7 +153,7 @@ async function save() {
   if (form.id) {
     await api.put(`/admin/users/${form.id}`, body)
   } else {
-    await api.post('/admin/users', { ...body, username: form.username })
+    await api.post('/admin/users', { ...body, username: form.username, role: 'user' })
   }
   ElMessage.success('已保存')
   visible.value = false

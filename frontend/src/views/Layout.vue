@@ -8,19 +8,25 @@
     <!-- 手机：导航抽屉 -->
     <el-drawer v-if="isPhone" v-model="navOpen" direction="ltr" size="264px" :with-header="false" class="nav-drawer" modal-class="nav-mask">
       <div class="aside drawer-aside">
-        <div class="logo" @click="go('/chat')">
+        <div class="logo" @click="go(homePath)">
           <div class="mark"><el-icon><MagicStick /></el-icon></div>
           <div class="brand"><b>企业AI知识库</b><span>RAG</span></div>
         </div>
         <el-scrollbar>
           <el-menu :default-active="$route.path" class="menu" @select="go">
-            <div class="group">工作台</div>
+            <div v-if="mainMenus.length" class="group">工作台</div>
             <el-menu-item v-for="m in mainMenus" :key="m.path" :index="m.path">
               <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
             </el-menu-item>
-            <template v-if="admin">
-              <div class="group">系统管理</div>
-              <el-menu-item v-for="m in adminMenus" :key="m.path" :index="m.path">
+            <template v-if="superAdmin">
+              <div class="group">系统</div>
+              <el-menu-item v-for="m in superMenus" :key="m.path" :index="m.path">
+                <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
+              </el-menu-item>
+            </template>
+            <template v-else-if="brokerAdmin">
+              <div class="group">客户管理</div>
+              <el-menu-item v-for="m in brokerMenus" :key="m.path" :index="m.path">
                 <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
               </el-menu-item>
             </template>
@@ -31,20 +37,25 @@
     </el-drawer>
 
     <el-aside v-if="!isPhone" :width="collapsed ? '68px' : '228px'" class="aside">
-      <div class="logo" @click="$router.push('/chat')">
+      <div class="logo" @click="$router.push(homePath)">
         <div class="mark"><el-icon><MagicStick /></el-icon></div>
         <transition name="fade"><div v-if="!collapsed" class="brand"><b>企业AI知识库</b><span>RAG</span></div></transition>
       </div>
       <el-scrollbar>
         <el-menu :default-active="$route.path" router :collapse="collapsed" :collapse-transition="false" class="menu">
-          <div v-if="!collapsed" class="group">工作台</div>
+          <div v-if="!collapsed && mainMenus.length" class="group">工作台</div>
           <el-menu-item v-for="m in mainMenus" :key="m.path" :index="m.path">
             <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
           </el-menu-item>
-          <!-- 以下菜单仅系统管理员可见 -->
-          <template v-if="admin">
-            <div v-if="!collapsed" class="group">系统管理</div>
-            <el-menu-item v-for="m in adminMenus" :key="m.path" :index="m.path">
+          <template v-if="superAdmin">
+            <div v-if="!collapsed" class="group">系统</div>
+            <el-menu-item v-for="m in superMenus" :key="m.path" :index="m.path">
+              <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
+            </el-menu-item>
+          </template>
+          <template v-else-if="brokerAdmin">
+            <div v-if="!collapsed" class="group">客户管理</div>
+            <el-menu-item v-for="m in brokerMenus" :key="m.path" :index="m.path">
               <el-icon><component :is="m.icon" /></el-icon><template #title>{{ m.title }}</template>
             </el-menu-item>
           </template>
@@ -63,7 +74,7 @@
           </el-button>
           <b v-if="isCompact" class="m-title">{{ $route.meta.title }}</b>
           <el-breadcrumb v-else separator="/">
-            <el-breadcrumb-item :to="{ path: '/chat' }">首页</el-breadcrumb-item>
+            <el-breadcrumb-item :to="{ path: homePath }">首页</el-breadcrumb-item>
             <el-breadcrumb-item v-if="$route.meta.group">{{ $route.meta.group }}</el-breadcrumb-item>
             <el-breadcrumb-item>{{ $route.meta.title }}</el-breadcrumb-item>
           </el-breadcrumb>
@@ -73,7 +84,7 @@
             <el-avatar :size="34" class="avatar">{{ initial }}</el-avatar>
             <div class="u-text">
               <b>{{ displayName }}</b>
-              <span>{{ admin ? '系统管理员' : '普通用户' }}</span>
+              <span>{{ roleLabel }}</span>
             </div>
             <el-icon class="arrow"><ArrowDown /></el-icon>
           </div>
@@ -102,19 +113,26 @@ import { isPhone, isCompact, PAD_MAX } from '../responsive'
 
 const displayName = localStorage.getItem('displayName') || localStorage.getItem('username')
 const username = localStorage.getItem('username')
-const admin = localStorage.getItem('role') === 'admin'
+const role = localStorage.getItem('role')
+const superAdmin = role === 'admin'
+const brokerAdmin = role === 'broker_admin'
+const roleLabel = superAdmin ? '超级管理员' : brokerAdmin ? '客户管理员' : '普通用户'
+const homePath = superAdmin ? '/brokers' : '/chat'
 const router = useRouter()
 const collapsed = ref(window.innerWidth <= PAD_MAX)
 const navOpen = ref(false)
 const initial = computed(() => (displayName || '?').slice(0, 1).toUpperCase())
 
-const mainMenus = [
+const mainMenus = superAdmin ? [] : [
   { path: '/chat', title: '智能问答', icon: 'ChatDotRound' },
   { path: '/documents', title: '文档管理', icon: 'Document' },
   { path: '/datasets', title: '数据集', icon: 'Grid' },
   { path: '/history', title: '问答历史', icon: 'Clock' },
 ]
-const adminMenus = [
+const superMenus = [
+  { path: '/brokers', title: '客户管理', icon: 'OfficeBuilding' },
+]
+const brokerMenus = [
   { path: '/kbs', title: '知识库管理', icon: 'Collection' },
   { path: '/users', title: '用户管理', icon: 'User' },
   { path: '/eval', title: '效果评测', icon: 'DataAnalysis' },
@@ -132,7 +150,7 @@ function go(path) {
 
 function onCommand(c) {
   if (c === 'logout') logout()
-  else if (c === 'history') router.push('/history')
+  else if (c === 'history' && !superAdmin) router.push('/history')
 }
 function logout() { localStorage.clear(); sessionStorage.clear(); router.push('/login') }
 

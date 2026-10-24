@@ -25,17 +25,16 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
- * 知识库接口。
- * - GET /api/kbs：当前用户可见的知识库（含我的角色、文档数），用于各页面的知识库选择器；
- * - /api/admin/kbs/**：管理员维护知识库和成员授权。
+ * 知识库接口：按 broker 隔离；超管不可访问。
+ * 客户管理员可完整管理；本客户 editor 可新建知识库。
  */
 @RestController
 public class KbController {
 
-    /** 合法的知识库角色 */
     private static final Set<String> KB_ROLES = Set.of("viewer", "editor");
 
     private final KbMapper kbs;
@@ -55,13 +54,12 @@ public class KbController {
         this.perm = perm;
     }
 
-    /** 我可见的知识库：[{id, name, description, visibility, myRole, docCount}] */
     @GetMapping("/api/kbs")
     public List<Map<String, Object>> mine() {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         Map<Long, String> roles = perm.kbRoles(me);
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Kb kb : kbs.selectList(new QueryWrapper<Kb>().orderByAsc("id"))) {
+        for (Kb kb : perm.brokerKbs(me.brokerId())) {
             if (roles.containsKey(kb.getId())) {
                 Map<String, Object> m = toMap(kb);
                 m.put("myRole", roles.get(kb.getId()));
@@ -71,14 +69,11 @@ public class KbController {
         return out;
     }
 
-    // ---------------- 以下为管理员接口 ----------------
-
-    /** 全部知识库（含成员数、文档数） */
     @GetMapping("/api/admin/kbs")
     public List<Map<String, Object>> list() {
-        perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
         List<Map<String, Object>> out = new ArrayList<>();
-        for (Kb kb : kbs.selectList(new QueryWrapper<Kb>().orderByAsc("id"))) {
+        for (Kb kb : perm.brokerKbs(me.brokerId())) {
             Map<String, Object> m = toMap(kb);
             m.put("memberCount", members.selectCount(new QueryWrapper<KbMember>().eq("kb_id", kb.getId())));
             out.add(m);
@@ -86,11 +81,14 @@ public class KbController {
         return out;
     }
 
-    /** 新建知识库：{name, description, visibility} */
     @PostMapping("/api/admin/kbs")
+    @Transactional
     public ResponseEntity<?> create(@RequestBody Kb req) {
-        perm.requireAdmin();
-        String error = validate(req, null);
+        CurrentUser me = perm.requireBusinessUser();
+        if (!perm.canCreateKb(me)) {
+            return ResponseEntity.status(403).body(Map.of("error", "没有新建知识库的权限"));
+        }
+        String error = validate(req, null, me.brokerId());
         if (error != null) {
             return ResponseEntity.badRequest().body(Map.of("error", error));
         }
@@ -98,19 +96,24 @@ public class KbController {
         kb.setName(req.getName().trim());
         kb.setDescription(req.getDescription());
         kb.setVisibility("public".equals(req.getVisibility()) ? "public" : "private");
+        kb.setBrokerId(me.brokerId());
         kbs.insert(kb);
+        // 非客户管理员创建时，自动授予自己 editor
+        if (!me.isBrokerAdmin()) {
+            KbMember m = new KbMember();
+            m.setKbId(kb.getId());
+            m.setUserId(me.id());
+            m.setRole("editor");
+            members.insert(m);
+        }
         return ResponseEntity.ok(kb);
     }
 
-    /** 修改知识库名称、说明、可见范围 */
     @PutMapping("/api/admin/kbs/{id}")
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Kb req) {
-        perm.requireAdmin();
-        Kb kb = kbs.selectById(id);
-        if (kb == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "知识库不存在"));
-        }
-        String error = validate(req, id);
+        CurrentUser me = perm.requireBrokerAdmin();
+        Kb kb = perm.requireBrokerKb(me, id);
+        String error = validate(req, id, me.brokerId());
         if (error != null) {
             return ResponseEntity.badRequest().body(Map.of("error", error));
         }
@@ -121,11 +124,11 @@ public class KbController {
         return ResponseEntity.ok(kb);
     }
 
-    /** 删除知识库：库中还有文档时不允许删除，避免误删大量资料 */
     @DeleteMapping("/api/admin/kbs/{id}")
     @Transactional
     public ResponseEntity<?> delete(@PathVariable Long id) {
-        perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
+        perm.requireBrokerKb(me, id);
         long docCount = documents.selectCount(new QueryWrapper<Document>().eq("kb_id", id).isNull("cleanup_status"));
         if (docCount > 0) {
             return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + docCount + " 个文档，请先删除或移走"));
@@ -139,14 +142,14 @@ public class KbController {
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
-    /** 知识库成员：[{userId, username, displayName, role}] */
     @GetMapping("/api/admin/kbs/{id}/members")
     public List<Map<String, Object>> members(@PathVariable Long id) {
-        perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
+        perm.requireBrokerKb(me, id);
         List<Map<String, Object>> out = new ArrayList<>();
         for (KbMember m : members.selectList(new QueryWrapper<KbMember>().eq("kb_id", id))) {
             User u = users.selectById(m.getUserId());
-            if (u == null) {
+            if (u == null || !Objects.equals(u.getBrokerId(), me.brokerId())) {
                 continue;
             }
             Map<String, Object> row = new HashMap<>();
@@ -159,24 +162,20 @@ public class KbController {
         return out;
     }
 
-    /**
-     * 整体设置知识库成员：[{userId, role}]，未出现在列表中的成员会被移除。
-     */
     @PutMapping("/api/admin/kbs/{id}/members")
     @Transactional
     public ResponseEntity<?> setMembers(@PathVariable Long id, @RequestBody List<Map<String, Object>> req) {
-        perm.requireAdmin();
-        if (kbs.selectById(id) == null) {
-            return ResponseEntity.status(404).body(Map.of("error", "知识库不存在"));
-        }
+        CurrentUser me = perm.requireBrokerAdmin();
+        perm.requireBrokerKb(me, id);
         for (Map<String, Object> item : req) {
             if (!KB_ROLES.contains(String.valueOf(item.get("role")))) {
                 return ResponseEntity.badRequest().body(Map.of("error", "角色只能是 viewer 或 editor"));
             }
-        }
-        long dsCount = datasets.selectCount(new QueryWrapper<com.kb.entity.Dataset>().eq("kb_id", id));
-        if (dsCount > 0) {
-            return ResponseEntity.badRequest().body(Map.of("error", "该知识库还有 " + dsCount + " 个数据集，请先删除"));
+            Long userId = ((Number) item.get("userId")).longValue();
+            User u = users.selectById(userId);
+            if (u == null || !Objects.equals(u.getBrokerId(), me.brokerId()) || "broker_admin".equals(u.getRole())) {
+                return ResponseEntity.badRequest().body(Map.of("error", "只能授权本客户的普通用户"));
+            }
         }
         members.delete(new QueryWrapper<KbMember>().eq("kb_id", id));
         for (Map<String, Object> item : req) {
@@ -189,15 +188,15 @@ public class KbController {
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
-    /** 校验名称非空且不重复；返回错误信息，校验通过返回 null */
-    private String validate(Kb req, Long selfId) {
+    private String validate(Kb req, Long selfId, Long brokerId) {
         if (req.getName() == null || req.getName().isBlank()) {
             return "知识库名称不能为空";
         }
         if (req.getName().trim().length() > 100) {
             return "知识库名称不能超过 100 个字";
         }
-        Kb same = kbs.selectOne(new QueryWrapper<Kb>().eq("name", req.getName().trim()));
+        QueryWrapper<Kb> q = new QueryWrapper<Kb>().eq("name", req.getName().trim()).eq("broker_id", brokerId);
+        Kb same = kbs.selectOne(q);
         if (same != null && !same.getId().equals(selfId)) {
             return "已存在同名知识库";
         }
@@ -210,6 +209,7 @@ public class KbController {
         m.put("name", kb.getName());
         m.put("description", kb.getDescription());
         m.put("visibility", kb.getVisibility());
+        m.put("brokerId", kb.getBrokerId());
         m.put("docCount", documents.selectCount(new QueryWrapper<Document>().eq("kb_id", kb.getId()).isNull("cleanup_status")));
         return m;
     }

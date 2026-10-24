@@ -4,7 +4,7 @@
 -->
 <template>
   <div class="page">
-    <PageHeader title="问答历史" icon="Clock" :desc="admin ? '查看全员问答记录与反馈，发现知识库的薄弱环节' : '查看你的问答记录与反馈'">
+    <PageHeader title="问答历史" icon="Clock" :desc="admin ? '查看本客户问答记录与反馈，发现知识库的薄弱环节' : '查看你的问答记录与反馈'">
       <el-button icon="Refresh" @click="load">刷新</el-button>
     </PageHeader>
 
@@ -112,10 +112,10 @@ import StatCard from '../components/StatCard.vue'
 import DataAnswer from '../components/DataAnswer.vue'
 import api from '../api'
 import { isPhone, isNarrow, shortTime } from '../responsive'
-import { isAdmin } from '../kb'
+import { isBrokerAdmin } from '../kb'
 
 // 普通用户只能看到自己的问答记录（后端已限制）；管理员看到全部，并显示提问人
-const admin = isAdmin()
+const admin = isBrokerAdmin()  // 客户管理员可看本客户全部历史
 
 const list = ref([])
 const loading = ref(false)

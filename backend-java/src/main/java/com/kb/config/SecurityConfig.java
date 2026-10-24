@@ -99,6 +99,7 @@ public class SecurityConfig {
                                 claims.getSubject(),          // 用户名
                                 claims.get("uid"),            // 用户 ID
                                 List.of(new SimpleGrantedAuthority("ROLE_" + claims.get("role"))));
+                        auth.setDetails(claims);              // 供 PermissionService 校验 bv
                         SecurityContextHolder.getContext().setAuthentication(auth);
                     } catch (Exception ignored) {
                         // token 无效：不设置身份，交给后续流程返回 401

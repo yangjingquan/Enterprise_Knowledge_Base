@@ -24,20 +24,18 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
  * 用户接口。
- * - GET /api/me：当前登录用户信息及可见知识库角色；
- * - /api/admin/users/**：管理员创建用户、修改角色 / 状态 / 密码、分配知识库权限。
+ * - GET /api/me：当前登录用户；
+ * - /api/admin/users/**：客户管理员管理本客户普通用户（不能创建 broker_admin / admin）。
  */
 @RestController
 public class UserController {
 
-    /** 用户名规则：字母开头，字母数字下划线，3~30 位 */
     private static final Pattern USERNAME = Pattern.compile("^[A-Za-z][A-Za-z0-9_]{2,29}$");
-
-    /** 密码最短长度 */
     private static final int MIN_PASSWORD = 6;
 
     private final UserMapper users;
@@ -57,7 +55,6 @@ public class UserController {
         this.perm = perm;
     }
 
-    /** 当前用户：{id, username, displayName, role, kbRoles: {知识库ID: 角色}} */
     @GetMapping("/api/me")
     public Map<String, Object> me() {
         CurrentUser me = perm.current();
@@ -67,18 +64,23 @@ public class UserController {
         out.put("username", u.getUsername());
         out.put("displayName", u.getDisplayName());
         out.put("role", u.getRole());
-        out.put("kbRoles", perm.kbRoles(me));
+        out.put("brokerId", u.getBrokerId());
+        out.put("kbRoles", me.isSuperAdmin() ? Map.of() : perm.kbRoles(me));
+        out.put("canCreateKb", !me.isSuperAdmin() && perm.canCreateKb(me));
         return out;
     }
 
-    /** 用户列表（含每个用户的知识库授权） */
     @GetMapping("/api/admin/users")
     public List<Map<String, Object>> list() {
-        perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
         Map<Long, String> kbNames = new HashMap<>();
-        kbs.selectList(null).forEach(kb -> kbNames.put(kb.getId(), kb.getName()));
+        perm.brokerKbs(me.brokerId()).forEach(kb -> kbNames.put(kb.getId(), kb.getName()));
         List<Map<String, Object>> out = new ArrayList<>();
-        for (User u : users.selectList(new QueryWrapper<User>().orderByAsc("id"))) {
+        for (User u : users.selectList(new QueryWrapper<User>()
+                .eq("broker_id", me.brokerId())
+                .ne("role", "admin")
+                .orderByAsc("id"))) {
+            // 客户管理员列表里也展示其他 broker_admin，但不可改他们的角色为普通
             Map<String, Object> row = new HashMap<>();
             row.put("id", u.getId());
             row.put("username", u.getUsername());
@@ -88,9 +90,12 @@ public class UserController {
             row.put("createTime", u.getCreateTime());
             List<Map<String, Object>> grants = new ArrayList<>();
             for (KbMember m : members.selectList(new QueryWrapper<KbMember>().eq("user_id", u.getId()))) {
+                if (!kbNames.containsKey(m.getKbId())) {
+                    continue;
+                }
                 grants.add(Map.of(
                         "kbId", m.getKbId(),
-                        "kbName", kbNames.getOrDefault(m.getKbId(), "已删除"),
+                        "kbName", kbNames.get(m.getKbId()),
                         "role", m.getRole()));
             }
             row.put("grants", grants);
@@ -99,13 +104,10 @@ public class UserController {
         return out;
     }
 
-    /**
-     * 创建用户：{username, displayName, passwordCipher（RSA-OAEP 密文，同登录）, role: user|admin, grants: [{kbId, role}]}
-     */
     @PostMapping("/api/admin/users")
     @Transactional
     public ResponseEntity<?> create(@RequestBody Map<String, Object> req) {
-        perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
         String username = str(req.get("username"));
         if (req.containsKey("password")) {
             return bad("不支持明文密码，请刷新页面后重试");
@@ -125,41 +127,47 @@ public class UserController {
         if (password.length() < MIN_PASSWORD) {
             return bad("密码至少 " + MIN_PASSWORD + " 位");
         }
+        // 客户管理员只能创建普通用户
+        if (req.get("role") != null && !"user".equals(req.get("role"))) {
+            return bad("只能创建普通用户");
+        }
         User u = new User();
         u.setUsername(username);
         u.setPassword(encoder.encode(password));
         u.setDisplayName(str(req.get("displayName")).isEmpty() ? username : str(req.get("displayName")));
-        u.setRole("admin".equals(req.get("role")) ? "admin" : "user");
+        u.setRole("user");
+        u.setBrokerId(me.brokerId());
         u.setEnabled(1);
         users.insert(u);
         if (req.get("grants") instanceof List<?> grants) {
-            saveGrants(u.getId(), grants);
+            saveGrants(me, u.getId(), grants);
         }
         return ResponseEntity.ok(Map.of("id", u.getId()));
     }
 
-    /**
-     * 修改用户：{displayName?, role?, enabled?, passwordCipher?, grants?}，只修改传入的字段。
-     * 不允许管理员停用自己或取消自己的管理员身份，避免把自己锁在系统外。
-     */
     @PutMapping("/api/admin/users/{id}")
     @Transactional
     public ResponseEntity<?> update(@PathVariable Long id, @RequestBody Map<String, Object> req) {
-        CurrentUser me = perm.requireAdmin();
+        CurrentUser me = perm.requireBrokerAdmin();
         User u = users.selectById(id);
-        if (u == null) {
+        if (u == null || !Objects.equals(u.getBrokerId(), me.brokerId())) {
             return ResponseEntity.status(404).body(Map.of("error", "用户不存在"));
         }
+        // 不能改其他客户管理员的角色/删除其管理员身份；可改密码、停用（同客户）
+        boolean isPeerAdmin = "broker_admin".equals(u.getRole());
         boolean self = u.getId().equals(me.id());
+
         if (req.containsKey("displayName")) {
             u.setDisplayName(str(req.get("displayName")));
         }
         if (req.containsKey("role")) {
-            String role = "admin".equals(req.get("role")) ? "admin" : "user";
-            if (self && !"admin".equals(role)) {
-                return bad("不能取消自己的管理员身份");
+            if (isPeerAdmin || self) {
+                return bad("不能修改客户管理员的角色");
             }
-            u.setRole(role);
+            if (!"user".equals(req.get("role"))) {
+                return bad("只能设置为普通用户");
+            }
+            u.setRole("user");
         }
         if (req.containsKey("enabled")) {
             boolean enabled = Boolean.TRUE.equals(req.get("enabled"));
@@ -171,7 +179,6 @@ public class UserController {
         if (req.get("password") != null && !str(req.get("password")).isEmpty()) {
             return bad("不支持明文密码，请刷新页面后重试");
         }
-        // 重置密码：passwordCipher 为 RSA-OAEP 密文（同登录）；不传表示不修改
         if (req.get("passwordCipher") != null && !str(req.get("passwordCipher")).isEmpty()) {
             String password;
             try {
@@ -186,21 +193,23 @@ public class UserController {
         }
         users.updateById(u);
         if (req.get("grants") instanceof List<?> grants) {
+            if (isPeerAdmin) {
+                return bad("不能修改客户管理员的知识库授权（其默认管理本客户全部知识库）");
+            }
             members.delete(new QueryWrapper<KbMember>().eq("user_id", id));
-            saveGrants(id, grants);
+            saveGrants(me, id, grants);
         }
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
-    /** 保存知识库授权，忽略不存在的知识库和非法角色 */
-    private void saveGrants(Long userId, List<?> grants) {
+    private void saveGrants(CurrentUser me, Long userId, List<?> grants) {
         for (Object g : grants) {
             if (!(g instanceof Map<?, ?> m) || !(m.get("kbId") instanceof Number kbId)) {
                 continue;
             }
             String role = "editor".equals(m.get("role")) ? "editor" : "viewer";
             Kb kb = kbs.selectById(kbId.longValue());
-            if (kb == null) {
+            if (kb == null || !Objects.equals(kb.getBrokerId(), me.brokerId())) {
                 continue;
             }
             KbMember member = new KbMember();

@@ -127,7 +127,7 @@ const addRole = ref('viewer')
 
 /** 可添加的用户：排除管理员和已是成员的用户 */
 const candidates = computed(() => users.value.filter(u =>
-  u.role !== 'admin' && !members.value.some(m => m.userId === u.id)))
+  u.role === 'user' && !members.value.some(m => m.userId === u.id)))
 
 async function load() {
   loading.value = true

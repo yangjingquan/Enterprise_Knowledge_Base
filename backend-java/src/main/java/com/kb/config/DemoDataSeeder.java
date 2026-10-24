@@ -1,9 +1,11 @@
 package com.kb.config;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.kb.entity.Broker;
 import com.kb.entity.Kb;
 import com.kb.entity.KbMember;
 import com.kb.entity.User;
+import com.kb.mapper.BrokerMapper;
 import com.kb.mapper.KbMapper;
 import com.kb.mapper.KbMemberMapper;
 import com.kb.mapper.UserMapper;
@@ -16,19 +18,16 @@ import org.springframework.core.annotation.Order;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Component;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 /**
- * 演示数据：三个部门知识库和三个部门账号，展示“按部门授权”的效果。
- * <p>
- * 只在数据不存在时创建（按名称判断），已存在的不会覆盖，管理员在页面上的修改会保留。
- * 生产环境可设置环境变量 KB_DEMO_SEED=false 关闭。
+ * 演示数据：创建一个演示客户 DEMO，并在其下建知识库与账号。
+ * 生产可设 KB_DEMO_SEED=false 关闭。
  * <pre>
- * 知识库：人事制度、财务制度、设备技术（均为私有）；公共知识库（公开，由 SchemaMigration 创建）
- * 账号：
- *   hr01  / Hr@2026   人事专员   人事制度 editor
- *   fin01 / Fin@2026  财务会计   财务制度 editor，人事制度 viewer
- *   eng01 / Eng@2026  设备工程师 设备技术 editor，人事制度 viewer
+ * 客户：DEMO（演示客户）
+ * 客户管理员：broker01 / Broker@2026
+ * 账号：hr01 / fin01 / eng01（同前）
  * </pre>
  */
 @Component
@@ -37,14 +36,14 @@ public class DemoDataSeeder implements ApplicationRunner {
 
     private static final Logger log = LoggerFactory.getLogger(DemoDataSeeder.class);
 
-    /** 演示知识库：名称、说明 */
+    private static final String DEMO_CODE = "DEMO";
+
     private static final List<String[]> KBS = List.of(
             new String[]{"人事制度", "员工手册、入职培训、考勤假期等人事管理制度"},
             new String[]{"财务制度", "差旅报销、费用管理等财务制度（仅财务人员可见）"},
             new String[]{"设备技术", "设备维护手册、点检记录、备件价格与库存"}
     );
 
-    /** 演示账号：用户名、密码、显示名称、授权（知识库名:角色） */
     private static final List<String[]> USERS = List.of(
             new String[]{"hr01", "Hr@2026", "人事专员-李婷", "人事制度:editor"},
             new String[]{"fin01", "Fin@2026", "财务会计-陈静", "财务制度:editor,人事制度:viewer"},
@@ -54,15 +53,18 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final KbMapper kbs;
     private final UserMapper users;
     private final KbMemberMapper members;
+    private final BrokerMapper brokers;
     private final BCryptPasswordEncoder encoder;
 
     @Value("${KB_DEMO_SEED:true}")
     private boolean enabled;
 
-    public DemoDataSeeder(KbMapper kbs, UserMapper users, KbMemberMapper members, BCryptPasswordEncoder encoder) {
+    public DemoDataSeeder(KbMapper kbs, UserMapper users, KbMemberMapper members,
+                          BrokerMapper brokers, BCryptPasswordEncoder encoder) {
         this.kbs = kbs;
         this.users = users;
         this.members = members;
+        this.brokers = brokers;
         this.encoder = encoder;
     }
 
@@ -71,30 +73,58 @@ public class DemoDataSeeder implements ApplicationRunner {
         if (!enabled) {
             return;
         }
+        Broker broker = brokers.selectOne(new QueryWrapper<Broker>().eq("code", DEMO_CODE));
+        if (broker == null) {
+            broker = new Broker();
+            broker.setName("演示客户");
+            broker.setCode(DEMO_CODE);
+            broker.setEnabled(1);
+            broker.setTokenVersion(0);
+            broker.setCreateTime(LocalDateTime.now());
+            broker.setUpdateTime(LocalDateTime.now());
+            brokers.insert(broker);
+            log.info("演示数据：创建客户 {}", DEMO_CODE);
+        }
+        Long brokerId = broker.getId();
+
+        if (users.selectCount(new QueryWrapper<User>().eq("username", "broker01")) == 0) {
+            User ba = new User();
+            ba.setUsername("broker01");
+            ba.setPassword(encoder.encode("Broker@2026"));
+            ba.setDisplayName("演示客户管理员");
+            ba.setRole("broker_admin");
+            ba.setBrokerId(brokerId);
+            ba.setEnabled(1);
+            users.insert(ba);
+            log.info("演示数据：创建客户管理员 broker01");
+        }
+
         for (String[] k : KBS) {
-            if (kbs.selectCount(new QueryWrapper<Kb>().eq("name", k[0])) == 0) {
+            if (kbs.selectCount(new QueryWrapper<Kb>().eq("name", k[0]).eq("broker_id", brokerId)) == 0) {
                 Kb kb = new Kb();
                 kb.setName(k[0]);
                 kb.setDescription(k[1]);
                 kb.setVisibility("private");
+                kb.setBrokerId(brokerId);
                 kbs.insert(kb);
                 log.info("演示数据：创建知识库「{}」", k[0]);
             }
         }
         for (String[] u : USERS) {
             if (users.selectCount(new QueryWrapper<User>().eq("username", u[0])) > 0) {
-                continue;   // 已存在的账号不覆盖（密码、授权可能已被管理员修改）
+                continue;
             }
             User user = new User();
             user.setUsername(u[0]);
             user.setPassword(encoder.encode(u[1]));
             user.setDisplayName(u[2]);
             user.setRole("user");
+            user.setBrokerId(brokerId);
             user.setEnabled(1);
             users.insert(user);
             for (String grant : u[3].split(",")) {
                 String[] parts = grant.split(":");
-                Kb kb = kbs.selectOne(new QueryWrapper<Kb>().eq("name", parts[0]));
+                Kb kb = kbs.selectOne(new QueryWrapper<Kb>().eq("name", parts[0]).eq("broker_id", brokerId));
                 KbMember m = new KbMember();
                 m.setKbId(kb.getId());
                 m.setUserId(user.getId());

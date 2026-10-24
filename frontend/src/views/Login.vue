@@ -10,7 +10,7 @@
         <ul class="features">
           <li><el-icon><Search /></el-icon><div><b>混合检索 + 重排序</b><span>向量 + 关键词召回，前 3 条命中率 100%</span></div></li>
           <li><el-icon><Reading /></el-icon><div><b>原文溯源高亮</b><span>点击引用直接定位到 PDF 原页并高亮</span></div></li>
-          <li><el-icon><Lock /></el-icon><div><b>知识库权限隔离</b><span>按部门授权，查看 / 编辑分级管理</span></div></li>
+          <li><el-icon><Lock /></el-icon><div><b>知识库权限隔离</b><span>按客户隔离，知识库授权分级管理</span></div></li>
         </ul>
       </div>
       <div class="copyright">© 2026 · Powered by DeepSeek & 阿里云百炼</div>
@@ -53,10 +53,10 @@ const f = reactive({ username: '', password: '' })
 const loading = ref(false)
 const router = useRouter()
 const demos = [
-  { n: '管理员', u: 'admin', p: 'admin123', c: '#4f46e5' },
+  { n: '超管', u: 'admin', p: 'admin123', c: '#4f46e5' },
+  { n: '客户管', u: 'broker01', p: 'Broker@2026', c: '#8b5cf6' },
   { n: '人事', u: 'hr01', p: 'Hr@2026', c: '#0ea5e9' },
   { n: '财务', u: 'fin01', p: 'Fin@2026', c: '#10b981' },
-  { n: '工程', u: 'eng01', p: 'Eng@2026', c: '#f59e0b' },
 ]
 const fill = a => Object.assign(f, { username: a.u, password: a.p })
 
@@ -77,8 +77,10 @@ async function login() {
     localStorage.setItem('username', r.username)
     localStorage.setItem('displayName', r.displayName || r.username)
     localStorage.setItem('role', r.role)
+    if (r.brokerId != null) localStorage.setItem('brokerId', String(r.brokerId))
+    else localStorage.removeItem('brokerId')
     sessionStorage.clear()   // 换账号登录时清掉上一个人的对话
-    router.push('/chat')
+    router.push(r.role === 'admin' ? '/brokers' : '/chat')
   } catch {
     // 错误提示（密码错误 / 已锁定等）已由 api 拦截器弹出
   } finally {

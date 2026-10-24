@@ -97,7 +97,7 @@ public class QaController {
      */
     @PostMapping("/ask")
     public Map<String, Object> ask(@RequestBody Map<String, Object> req) throws Exception {
-        CurrentUser user = perm.current();
+        CurrentUser user = perm.requireBusinessUser();
         Map<String, Object> body = buildRagRequest(req, user);
 
         // 同步调用 Python，返回 {"answer": "...", "sources": [...], "rewritten_question": "..."}
@@ -134,7 +134,7 @@ public class QaController {
     @PostMapping(value = "/ask/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public ResponseEntity<StreamingResponseBody> askStream(@RequestBody Map<String, Object> req) {
         // 权限必须在这里（请求线程）计算：流式输出在异步线程中执行，那里取不到登录信息
-        CurrentUser user = perm.current();
+        CurrentUser user = perm.requireBusinessUser();
         Map<String, Object> body = buildRagRequest(req, user);
         String question = String.valueOf(req.get("question"));
 
@@ -205,10 +205,10 @@ public class QaController {
      */
     @PostMapping("/{id}/feedback")
     public ResponseEntity<?> feedback(@PathVariable Long id, @RequestBody Map<String, Object> req) {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         QaHistory record = history.selectById(id);
         // 只能对自己的问答反馈（管理员除外）
-        if (record == null || (!me.isAdmin() && !me.id().equals(record.getUserId()))) {
+        if (record == null || (!me.isBrokerAdmin() && !me.id().equals(record.getUserId()))) {
             return ResponseEntity.status(404).body(Map.of("error", "问答记录不存在"));
         }
         if (!(req.get("value") instanceof Number num)
@@ -272,14 +272,17 @@ public class QaController {
         return Map.of("total", total, "up", up, "down", down, "none", total - up - down);
     }
 
-    /** 按当前用户限定查询范围：普通用户只看自己的；管理员看全部，或按 username 筛选 */
+    /** 按当前用户限定：普通用户只看自己；客户管理员看本客户全部（可按 username 筛） */
     private QueryWrapper<QaHistory> scoped(String username) {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         QueryWrapper<QaHistory> query = new QueryWrapper<>();
-        if (!me.isAdmin()) {
+        if (me.isBrokerAdmin()) {
+            query.inSql("user_id", "SELECT id FROM user WHERE broker_id = " + me.brokerId());
+            if (username != null && !username.isBlank()) {
+                query.eq("username", username);
+            }
+        } else {
             query.eq("user_id", me.id());
-        } else if (username != null && !username.isBlank()) {
-            query.eq("username", username);
         }
         return query;
     }
@@ -408,9 +411,9 @@ public class QaController {
     @GetMapping("/{id}/export.csv")
     @SuppressWarnings("unchecked")
     public ResponseEntity<byte[]> exportCsv(@PathVariable Long id) throws java.io.IOException {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         QaHistory qa = history.selectById(id);
-        if (qa == null || (!me.isAdmin() && !me.id().equals(qa.getUserId()))) {
+        if (qa == null || (!me.isBrokerAdmin() && !me.id().equals(qa.getUserId()))) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "记录不存在");
         }
         if (qa.getAnalysis() == null) {

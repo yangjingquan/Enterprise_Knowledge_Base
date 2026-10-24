@@ -2,27 +2,40 @@
 CREATE DATABASE IF NOT EXISTS kb DEFAULT CHARSET utf8mb4;
 USE kb;
 
--- 用户表
+CREATE TABLE IF NOT EXISTS broker (
+    id BIGINT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(64) NOT NULL,
+    enabled TINYINT DEFAULT 1,
+    token_version INT DEFAULT 0,
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    update_time DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_broker_code (code)
+);
+
 CREATE TABLE IF NOT EXISTS user (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     username VARCHAR(50) NOT NULL UNIQUE,
     password VARCHAR(100) NOT NULL,
-    role VARCHAR(20) DEFAULT 'user' COMMENT 'admin 系统管理员 / user 普通用户',
+    role VARCHAR(20) DEFAULT 'user' COMMENT 'admin 超管 / broker_admin 客户管理员 / user 普通用户',
     display_name VARCHAR(50) NULL COMMENT '显示名称',
+    broker_id BIGINT NULL COMMENT '所属客户，超管为空',
     enabled TINYINT DEFAULT 1 COMMENT '1启用 0停用',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_user_broker (broker_id)
 );
 
--- 知识库表：visibility = public 时所有登录用户可查看，private 时仅被授权的用户可查看
 CREATE TABLE IF NOT EXISTS kb (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
-    name VARCHAR(100) NOT NULL UNIQUE,
+    name VARCHAR(100) NOT NULL,
     description VARCHAR(500),
     visibility VARCHAR(20) DEFAULT 'private',
-    create_time DATETIME DEFAULT CURRENT_TIMESTAMP
+    broker_id BIGINT NULL COMMENT '所属客户',
+    create_time DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_kb_broker (broker_id),
+    UNIQUE KEY uk_kb_broker_name (broker_id, name)
 );
 
--- 知识库授权表：role = viewer（可问答、看原文）/ editor（还可上传、删除文档）
 CREATE TABLE IF NOT EXISTS kb_member (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     kb_id BIGINT NOT NULL,
@@ -32,7 +45,6 @@ CREATE TABLE IF NOT EXISTS kb_member (
     UNIQUE KEY uk_kb_user (kb_id, user_id)
 );
 
--- 文档表：file_type 为 url 表示网页导入，source_url 记录原始网址；kb_id 为所属知识库
 CREATE TABLE IF NOT EXISTS document (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     title VARCHAR(200),
@@ -49,7 +61,6 @@ CREATE TABLE IF NOT EXISTS document (
     INDEX idx_doc_kb (kb_id)
 );
 
--- 问答历史表：session_id 关联同一次对话的多轮问答，feedback 为用户反馈（1 有用 / -1 没用）
 CREATE TABLE IF NOT EXISTS qa_history (
     id BIGINT PRIMARY KEY AUTO_INCREMENT,
     document_id BIGINT,

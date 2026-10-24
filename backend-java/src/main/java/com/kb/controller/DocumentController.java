@@ -93,7 +93,7 @@ public class DocumentController {
     @PostMapping("/upload")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file,
                                     @RequestParam("kbId") Long kbId) throws Exception {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         if (!perm.canEdit(me, kbId)) {
             return ResponseEntity.status(403).body(Map.of("error", "没有该知识库的上传权限"));
         }
@@ -148,7 +148,7 @@ public class DocumentController {
      */
     @PostMapping("/url")
     public ResponseEntity<?> importUrl(@RequestBody Map<String, Object> req) {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         Long kbId = req.get("kbId") instanceof Number n ? n.longValue() : null;
         if (!perm.canEdit(me, kbId)) {
             return ResponseEntity.status(403).body(Map.of("error", "没有该知识库的导入权限"));
@@ -190,7 +190,7 @@ public class DocumentController {
     /** 文档列表：GET /api/documents?kbId=可选，只返回有查看权限的知识库中的文档 */
     @GetMapping
     public List<Document> list(@RequestParam(required = false) Long kbId) {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         List<Long> readable = perm.readableKbIds(me);
         if (kbId != null) {
             readable = readable.contains(kbId) ? List.of(kbId) : List.of();
@@ -213,7 +213,7 @@ public class DocumentController {
         if (doc != null && doc.getCleanupStatus() != null) {
             doc = null;
         }
-        perm.requireEditable(perm.current(), doc);
+        perm.requireEditable(perm.requireBusinessUser(), doc);
         if (!"failed".equals(doc.getStatus())) {
             return ResponseEntity.status(409).body(Map.of("error", "只有处理失败的文档可以重试"));
         }
@@ -234,7 +234,7 @@ public class DocumentController {
      */
     @PostMapping("/admin/purge-orphans")
     public Map<String, Object> purgeOrphans(@RequestParam(defaultValue = "false") boolean dryRun) {
-        perm.requireAdmin();
+        perm.requireSuperAdmin();
         return cleanup.purgeOrphans(dryRun);
     }
 
@@ -244,7 +244,7 @@ public class DocumentController {
      */
     @PutMapping("/{id}/kb")
     public ResponseEntity<?> move(@PathVariable Long id, @RequestBody Map<String, Object> req) {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         Document doc = mapper.selectById(id);
         perm.requireEditable(me, doc);
         Long target = req.get("kbId") instanceof Number n ? n.longValue() : null;
@@ -265,7 +265,7 @@ public class DocumentController {
     @GetMapping("/{id}/file")
     public ResponseEntity<?> file(@PathVariable Long id) {
         Document doc = mapper.selectById(id);
-        perm.requireReadable(perm.current(), doc);
+        perm.requireReadable(perm.requireBusinessUser(), doc);
         Path root = Paths.get(uploadDir).toAbsolutePath().normalize();
         Path path = Paths.get(doc.getFilePath()).toAbsolutePath().normalize();
         if (!path.startsWith(root) || !Files.isRegularFile(path)) {
@@ -293,7 +293,7 @@ public class DocumentController {
     public List<?> context(@PathVariable Long id,
                            @RequestParam int chunkIndex,
                            @RequestParam(defaultValue = "2") int window) {
-        perm.requireReadable(perm.current(), mapper.selectById(id));
+        perm.requireReadable(perm.requireBusinessUser(), mapper.selectById(id));
         return ingest.context(id, chunkIndex, Math.max(0, Math.min(window, 5)));
     }
 
@@ -305,7 +305,7 @@ public class DocumentController {
     @DeleteMapping("/{id}")
     public Map<String, Object> delete(@PathVariable Long id) {
         Document doc = mapper.selectById(id);
-        perm.requireEditable(perm.current(), doc);
+        perm.requireEditable(perm.requireBusinessUser(), doc);
         if (doc.getCleanupStatus() != null) {
             return Map.of("ok", true, "cleanupPending", true);   // 已在等待后台清理
         }

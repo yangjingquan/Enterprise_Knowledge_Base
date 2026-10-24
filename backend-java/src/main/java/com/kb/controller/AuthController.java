@@ -2,7 +2,9 @@ package com.kb.controller;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.kb.config.JwtUtil;
+import com.kb.entity.Broker;
 import com.kb.entity.User;
+import com.kb.mapper.BrokerMapper;
 import com.kb.mapper.UserMapper;
 import com.kb.service.LoginGuard;
 import com.kb.service.PasswordCrypto;
@@ -18,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.net.InetAddress;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -28,35 +31,27 @@ import java.util.Map;
 public class AuthController {
 
     private final UserMapper users;
+    private final BrokerMapper brokers;
     private final BCryptPasswordEncoder encoder;
     private final JwtUtil jwt;
-
     private final PasswordCrypto crypto;
     private final LoginGuard guard;
 
-    /** 构造器注入依赖 */
-    public AuthController(UserMapper users, BCryptPasswordEncoder encoder, JwtUtil jwt,
+    public AuthController(UserMapper users, BrokerMapper brokers, BCryptPasswordEncoder encoder, JwtUtil jwt,
                           PasswordCrypto crypto, LoginGuard guard) {
         this.users = users;
+        this.brokers = brokers;
         this.encoder = encoder;
         this.jwt = jwt;
         this.crypto = crypto;
         this.guard = guard;
     }
 
-    /**
-     * 健康检查：GET /api/auth/ping，无需登录（/api/auth/** 已放行），返回 {"status":"ok"}。
-     * 部署流水线通过 nginx 访问它，确认 Java 服务已启动并能经由反向代理访问。
-     */
     @GetMapping("/ping")
     public ResponseEntity<?> ping() {
         return ResponseEntity.ok().header("Cache-Control", "no-store").body(Map.of("status", "ok"));
     }
 
-    /**
-     * 获取登录用公钥：GET /api/auth/public-key，返回 {publicKey(SPKI base64), nonce, expiresIn, alg}。
-     * nonce 一次性、60 秒有效；登录、新建用户、重置密码前都要先取一次。
-     */
     @GetMapping("/public-key")
     public ResponseEntity<?> publicKey() {
         try {
@@ -66,11 +61,6 @@ public class AuthController {
         }
     }
 
-    /**
-     * 登录：POST /api/auth/login，请求体 {"username": "...", "passwordCipher": "RSA-OAEP 密文(base64)"}。
-     * 密文内容为 {"password", "nonce", "ts"}；不再接受明文 password 字段。
-     * 同一账号或同一 IP 连续失败 5 次锁定 10 分钟（429），登录成功清零。
-     */
     @PostMapping("/login")
     public ResponseEntity<?> login(@RequestBody Map<String, Object> req, HttpServletRequest http) {
         String username = req.get("username") instanceof String s ? s.trim() : "";
@@ -94,7 +84,6 @@ public class AuthController {
             return ResponseEntity.status(400).body(Map.of("error", e.getMessage()));
         }
 
-        // 按用户名查询用户；用户不存在，或密码与数据库中的 BCrypt 密文不匹配
         User user = username.isEmpty() ? null : users.selectOne(new QueryWrapper<User>().eq("username", username));
         if (user == null || !encoder.matches(password, user.getPassword())) {
             if (guard.fail(username, ip)) {
@@ -102,18 +91,38 @@ public class AuthController {
             }
             return ResponseEntity.status(401).body(Map.of("error", "用户名或密码错误"));
         }
-        // 已停用的账号不允许登录
         if (Integer.valueOf(0).equals(user.getEnabled())) {
             return ResponseEntity.status(401).body(Map.of("error", "账号已停用，请联系管理员"));
         }
-        guard.success(username, ip);
 
-        String token = jwt.create(user.getId(), user.getUsername(), user.getRole());
-        return ResponseEntity.ok(Map.of(
-                "token", token,
-                "username", user.getUsername(),
-                "displayName", user.getDisplayName() == null ? user.getUsername() : user.getDisplayName(),
-                "role", user.getRole()));
+        Long brokerId = null;
+        int bv = 0;
+        String brokerName = null;
+        if (!"admin".equals(user.getRole())) {
+            if (user.getBrokerId() == null) {
+                return ResponseEntity.status(401).body(Map.of("error", "账号尚未分配客户，请联系管理员"));
+            }
+            Broker b = brokers.selectById(user.getBrokerId());
+            if (b == null || Integer.valueOf(0).equals(b.getEnabled())) {
+                return ResponseEntity.status(401).body(Map.of("error", "账号不可用"));
+            }
+            brokerId = b.getId();
+            bv = b.getTokenVersion() == null ? 0 : b.getTokenVersion();
+            brokerName = b.getName();
+        }
+
+        guard.success(username, ip);
+        String token = jwt.create(user.getId(), user.getUsername(), user.getRole(), brokerId, bv);
+        Map<String, Object> out = new HashMap<>();
+        out.put("token", token);
+        out.put("username", user.getUsername());
+        out.put("displayName", user.getDisplayName() == null ? user.getUsername() : user.getDisplayName());
+        out.put("role", user.getRole());
+        out.put("brokerId", brokerId);
+        if (brokerName != null) {
+            out.put("brokerName", brokerName);
+        }
+        return ResponseEntity.ok(out);
     }
 
     private ResponseEntity<?> locked(long seconds) {
@@ -123,10 +132,6 @@ public class AuthController {
                 "retryAfter", seconds));
     }
 
-    /**
-     * 客户端 IP：请求来自内网 / 本机反向代理（nginx）时取 X-Real-IP，否则取直连地址，
-     * 防止公网客户端伪造请求头绕过按 IP 限流。
-     */
     static String clientIp(HttpServletRequest http) {
         String remote = http.getRemoteAddr();
         String real = http.getHeader("X-Real-IP");
@@ -140,15 +145,12 @@ public class AuthController {
         try {
             InetAddress a = InetAddress.getByName(ip);
             return a.isLoopbackAddress() || a.isSiteLocalAddress() || a.isLinkLocalAddress()
-                    || (a.getAddress().length == 16 && (a.getAddress()[0] & 0xfe) == 0xfc);   // IPv6 ULA
+                    || (a.getAddress().length == 16 && (a.getAddress()[0] & 0xfe) == 0xfc);
         } catch (Exception e) {
             return false;
         }
     }
 
-    /**
-     * 应用启动时执行：如果数据库里还没有 admin 用户，就自动创建演示管理员 admin / admin123。
-     */
     @Bean
     static CommandLineRunner seedAdmin(UserMapper users, BCryptPasswordEncoder encoder) {
         return args -> {
@@ -156,7 +158,7 @@ public class AuthController {
             if (!exists) {
                 User admin = new User();
                 admin.setUsername("admin");
-                admin.setPassword(encoder.encode("admin123"));   // 只保存加密后的密码
+                admin.setPassword(encoder.encode("admin123"));
                 admin.setRole("admin");
                 admin.setDisplayName("系统管理员");
                 admin.setEnabled(1);

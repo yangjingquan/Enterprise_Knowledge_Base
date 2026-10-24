@@ -1,13 +1,16 @@
 package com.kb.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
+import com.kb.entity.Broker;
 import com.kb.entity.Document;
 import com.kb.entity.Kb;
 import com.kb.entity.KbMember;
 import com.kb.entity.User;
+import com.kb.mapper.BrokerMapper;
 import com.kb.mapper.KbMapper;
 import com.kb.mapper.KbMemberMapper;
 import com.kb.mapper.UserMapper;
+import io.jsonwebtoken.Claims;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -17,44 +20,50 @@ import org.springframework.web.server.ResponseStatusException;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
- * 权限判断服务：所有“能不能看 / 能不能改”的判断都集中在这里，Controller 只调用不重复写规则。
+ * 权限判断：超级管理员只做客户管理；业务数据按 broker 隔离。
  * <p>
  * 规则：
- * 1. 系统管理员（role = admin）：可查看和管理全部知识库、文档、用户；
- * 2. 普通用户：
- *    - 公开知识库（visibility = public）：可查看（问答、看原文）；
- *    - 被授权为 viewer 的知识库：可查看；
- *    - 被授权为 editor 的知识库：可查看，并可上传、导入、删除文档；
- *    - 其他知识库：不可见，问答检索时也不会用到其中的内容。
- * 3. 权限在 Java 端计算后，把“可查看的知识库 ID 列表”传给 Python，Python 检索时按列表过滤。
+ * 1. admin（超管）：不能访问业务数据；
+ * 2. broker_admin：本客户内等同知识库管理员；
+ * 3. user：公开库（本客户）可查看；kb_member 覆盖；editor 可建库。
  */
 @Service
 public class PermissionService {
 
-    /** 当前登录用户 */
-    public record CurrentUser(Long id, String username, String role) {
-        public boolean isAdmin() {
+    public record CurrentUser(Long id, String username, String role, Long brokerId) {
+        public boolean isSuperAdmin() {
             return "admin".equals(role);
+        }
+
+        /** @deprecated 用 isSuperAdmin；保留以免旧代码编译失败 */
+        public boolean isAdmin() {
+            return isSuperAdmin();
+        }
+
+        public boolean isBrokerAdmin() {
+            return "broker_admin".equals(role);
         }
     }
 
     private final UserMapper users;
     private final KbMapper kbs;
     private final KbMemberMapper members;
+    private final BrokerMapper brokers;
 
-    public PermissionService(UserMapper users, KbMapper kbs, KbMemberMapper members) {
+    public PermissionService(UserMapper users, KbMapper kbs, KbMemberMapper members, BrokerMapper brokers) {
         this.users = users;
         this.kbs = kbs;
         this.members = members;
+        this.brokers = brokers;
     }
 
     /**
-     * 取当前登录用户。每次都查一次数据库：用户被停用或角色被修改后立即生效，
-     * 不用等 token 过期。未登录或已停用时抛出 401。
+     * 当前登录用户。每次查库：停用、角色变更、broker 停用 / token_version 变更立即生效。
      */
     public CurrentUser current() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -65,44 +74,98 @@ public class PermissionService {
         if (u == null || Integer.valueOf(0).equals(u.getEnabled())) {
             throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号不存在或已停用");
         }
-        return new CurrentUser(u.getId(), u.getUsername(), u.getRole());
+        if (!"admin".equals(u.getRole())) {
+            if (u.getBrokerId() == null) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号尚未分配客户，请联系管理员");
+            }
+            Broker b = brokers.selectById(u.getBrokerId());
+            if (b == null || Integer.valueOf(0).equals(b.getEnabled())) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "账号不可用");
+            }
+            int expectedBv = b.getTokenVersion() == null ? 0 : b.getTokenVersion();
+            int tokenBv = 0;
+            Object details = auth.getDetails();
+            if (details instanceof Claims claims) {
+                Object bv = claims.get("bv");
+                if (bv instanceof Number n) {
+                    tokenBv = n.intValue();
+                }
+            }
+            if (tokenBv != expectedBv) {
+                throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "登录已失效，请重新登录");
+            }
+        }
+        return new CurrentUser(u.getId(), u.getUsername(), u.getRole(), u.getBrokerId());
     }
 
-    /** 要求管理员，否则 403 */
-    public CurrentUser requireAdmin() {
+    public CurrentUser requireSuperAdmin() {
         CurrentUser me = current();
-        if (!me.isAdmin()) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "需要管理员权限");
+        if (!me.isSuperAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "需要超级管理员权限");
         }
         return me;
     }
 
-    /**
-     * 用户在各知识库中的角色：{知识库ID: "admin" / "editor" / "viewer"}，不包含无权限的知识库。
-     */
+    /** 业务接口：拒绝超管 */
+    public CurrentUser requireBusinessUser() {
+        CurrentUser me = current();
+        if (me.isSuperAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "超级管理员不能访问业务数据");
+        }
+        if (me.brokerId() == null) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "账号尚未分配客户");
+        }
+        return me;
+    }
+
+    public CurrentUser requireBrokerAdmin() {
+        CurrentUser me = requireBusinessUser();
+        if (!me.isBrokerAdmin()) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "需要客户管理员权限");
+        }
+        return me;
+    }
+
+    /** @deprecated 改为 requireSuperAdmin 或 requireBrokerAdmin */
+    public CurrentUser requireAdmin() {
+        return requireSuperAdmin();
+    }
+
+    /** 本客户下全部知识库 */
+    public List<Kb> brokerKbs(Long brokerId) {
+        if (brokerId == null) {
+            return List.of();
+        }
+        return kbs.selectList(new QueryWrapper<Kb>().eq("broker_id", brokerId).orderByAsc("id"));
+    }
+
     public Map<Long, String> kbRoles(CurrentUser me) {
         Map<Long, String> roles = new HashMap<>();
-        List<Kb> all = kbs.selectList(null);
-        if (me.isAdmin()) {
+        if (me.isSuperAdmin() || me.brokerId() == null) {
+            return roles;
+        }
+        List<Kb> all = brokerKbs(me.brokerId());
+        if (me.isBrokerAdmin()) {
             all.forEach(kb -> roles.put(kb.getId(), "admin"));
             return roles;
         }
-        // 公开知识库默认可查看
         all.stream()
                 .filter(kb -> "public".equals(kb.getVisibility()))
                 .forEach(kb -> roles.put(kb.getId(), "viewer"));
-        // 授权记录覆盖默认值（例如公开库中被授权为 editor）
         members.selectList(new QueryWrapper<KbMember>().eq("user_id", me.id()))
-                .forEach(m -> roles.put(m.getKbId(), m.getRole()));
+                .forEach(m -> {
+                    Kb kb = kbs.selectById(m.getKbId());
+                    if (kb != null && Objects.equals(kb.getBrokerId(), me.brokerId())) {
+                        roles.put(m.getKbId(), m.getRole());
+                    }
+                });
         return roles;
     }
 
-    /** 可查看的知识库 ID 列表 */
     public List<Long> readableKbIds(CurrentUser me) {
         return kbRoles(me).keySet().stream().sorted().toList();
     }
 
-    /** 可编辑（上传 / 删除文档）的知识库 ID 集合 */
     public Set<Long> editableKbIds(CurrentUser me) {
         return kbRoles(me).entrySet().stream()
                 .filter(e -> "admin".equals(e.getValue()) || "editor".equals(e.getValue()))
@@ -118,20 +181,45 @@ public class PermissionService {
         return kbId != null && editableKbIds(me).contains(kbId);
     }
 
-    /**
-     * 校验文档可查看。无权限时返回 404 而不是 403：不向无权限的人透露“这个文档存在”。
-     */
+    /** 能否新建知识库：客户管理员，或本客户内任一知识库的 editor */
+    public boolean canCreateKb(CurrentUser me) {
+        if (me.isBrokerAdmin()) {
+            return true;
+        }
+        return editableKbIds(me).stream().anyMatch(id -> {
+            String r = kbRoles(me).get(id);
+            return "editor".equals(r) || "admin".equals(r);
+        });
+    }
+
     public void requireReadable(CurrentUser me, Document doc) {
         if (doc == null || !canRead(me, doc.getKbId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "文档不存在或无权访问");
         }
     }
 
-    /** 校验文档可编辑，否则 403 */
     public void requireEditable(CurrentUser me, Document doc) {
         requireReadable(me, doc);
         if (!canEdit(me, doc.getKbId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "没有该知识库的编辑权限");
         }
+    }
+
+    /** 知识库必须属于当前用户的客户，否则 404 */
+    public Kb requireBrokerKb(CurrentUser me, Long kbId) {
+        Kb kb = kbs.selectById(kbId);
+        if (kb == null || !Objects.equals(kb.getBrokerId(), me.brokerId())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "知识库不存在或无权访问");
+        }
+        return kb;
+    }
+
+    /** 用户必须属于当前客户，否则 404 */
+    public User requireBrokerUser(CurrentUser me, Long userId) {
+        User u = users.selectById(userId);
+        if (u == null || !Objects.equals(u.getBrokerId(), me.brokerId()) || "admin".equals(u.getRole())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "用户不存在或无权访问");
+        }
+        return u;
     }
 }

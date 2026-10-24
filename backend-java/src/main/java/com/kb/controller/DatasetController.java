@@ -60,7 +60,7 @@ public class DatasetController {
 
     private Dataset readable(Long id) {
         Dataset ds = datasets.selectById(id);
-        if (ds == null || !perm.canRead(perm.current(), ds.getKbId())) {
+        if (ds == null || !perm.canRead(perm.requireBusinessUser(), ds.getKbId())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "数据集不存在或无权访问");
         }
         return ds;
@@ -68,7 +68,7 @@ public class DatasetController {
 
     private Dataset editable(Long id) {
         Dataset ds = readable(id);
-        if (!perm.canEdit(perm.current(), ds.getKbId())) {
+        if (!perm.canEdit(perm.requireBusinessUser(), ds.getKbId())) {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "没有该知识库的编辑权限");
         }
         return ds;
@@ -92,7 +92,7 @@ public class DatasetController {
     /** 上传：POST /api/datasets/upload（multipart：file、kbId），异步生成导入方案 */
     @PostMapping("/upload")
     public ResponseEntity<?> upload(@RequestParam("file") MultipartFile file, @RequestParam("kbId") Long kbId) throws Exception {
-        CurrentUser me = perm.current();
+        CurrentUser me = perm.requireBusinessUser();
         if (!perm.canEdit(me, kbId)) {
             return ResponseEntity.status(403).body(Map.of("error", "没有该知识库的上传权限"));
         }
@@ -135,7 +135,7 @@ public class DatasetController {
     /** 列表：GET /api/datasets?kbId=可选 */
     @GetMapping
     public List<Dataset> list(@RequestParam(required = false) Long kbId) {
-        List<Long> readable = perm.readableKbIds(perm.current());
+        List<Long> readable = perm.readableKbIds(perm.requireBusinessUser());
         if (kbId != null) {
             readable = readable.contains(kbId) ? List.of(kbId) : List.of();
         }
@@ -161,7 +161,7 @@ public class DatasetController {
         out.put("tables", ts);
         // sheet 中识别出的备注/口径说明（作为大模型理解数据的上下文，不进入文档问答）
         out.put("notes", blocks.selectList(new QueryWrapper<DatasetBlock>().eq("dataset_id", id).eq("kind", "note").orderByAsc("id")));
-        out.put("canEdit", perm.canEdit(perm.current(), ds.getKbId()));
+        out.put("canEdit", perm.canEdit(perm.requireBusinessUser(), ds.getKbId()));
         return out;
     }
 

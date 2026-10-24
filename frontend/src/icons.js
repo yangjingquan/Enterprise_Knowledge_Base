@@ -4,7 +4,7 @@ import {
   Fold, Expand, ArrowDown, SwitchButton, Search, Promotion, VideoPause, CopyDocument, Refresh,
   Folder, FolderOpened, Reading, Files, Delete, Edit, UserFilled, Setting, Histogram, CircleCheck,
   Warning, ChatLineSquare, MagicStick, Opportunity, Cpu, Tickets, Connection, Download, ArrowLeft, ArrowRight,
-  House, Check, Close, Star, TrendCharts, Grid, Coin, Menu, Operation, MoreFilled,
+  House, Check, Close, Star, TrendCharts, Grid, Coin, Menu, Operation, MoreFilled, OfficeBuilding,
 } from '@element-plus/icons-vue'
 
 export const icons = {
@@ -12,5 +12,5 @@ export const icons = {
   Fold, Expand, ArrowDown, SwitchButton, Search, Promotion, VideoPause, CopyDocument, Refresh,
   Folder, FolderOpened, Reading, Files, Delete, Edit, UserFilled, Setting, Histogram, CircleCheck,
   Warning, ChatLineSquare, MagicStick, Opportunity, Cpu, Tickets, Connection, Download, ArrowLeft, ArrowRight,
-  House, Check, Close, Star, TrendCharts, Grid, Coin, Menu, Operation, MoreFilled,
+  House, Check, Close, Star, TrendCharts, Grid, Coin, Menu, Operation, MoreFilled, OfficeBuilding,
 }
