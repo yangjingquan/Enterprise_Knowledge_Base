@@ -14,7 +14,7 @@
 | 模块 | 技术 |
 |---|---|
 | 登录鉴权 | Spring Security + JWT，BCrypt 密码 |
-| 文档管理 | 上传（类型白名单、≤20MB）、异步处理、状态流转 pending → processing → ready / failed |
+| 文档管理 | 上传（类型白名单、≤50MB）、异步处理、状态流转 pending → processing → ready / failed |
 | 文档解析 | pdfplumber（表格转 Markdown、NFKC 字符标准化）、python-docx、openpyxl（每个工作表转 Markdown 表格，每块重复表头）、python-pptx（按幻灯片，含表格和演讲者备注）、trafilatura（网页正文提取） |
 | 多轮对话 | 带最近 3 轮历史；DeepSeek 先把追问改写成独立问题再检索，历史作为多轮消息参与生成；会话 ID 记入历史 |
 | 原文查看 | 点击引用来源：PDF 用 pdf.js 渲染对应页并高亮引用文字；其他格式显示引用块及前后文 |

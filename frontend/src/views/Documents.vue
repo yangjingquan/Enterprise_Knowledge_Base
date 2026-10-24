@@ -131,7 +131,7 @@
         </el-tab-pane>
       </el-tabs>
       <el-alert type="info" :closable="false" show-icon class="tip-alert"
-        title="PDF 扫描件自动 OCR；单文件不超过 20MB；Excel 按工作表、PPT 按幻灯片标注出处" />
+        title="PDF 扫描件自动 OCR；单文件不超过 50MB；Excel 按工作表、PPT 按幻灯片标注出处" />
     </el-dialog>
   </div>
 </template>
@@ -204,8 +204,8 @@ function check(f) {
     ElMessage.error(`不支持 .${ext} 文件`)
     return false
   }
-  if (f.size > 20 * 1024 * 1024) {
-    ElMessage.error('文件不能超过 20MB')
+  if (f.size > 50 * 1024 * 1024) {
+    ElMessage.error('文件不能超过 50MB')
     return false
   }
   return true

@@ -105,7 +105,7 @@
       </el-upload>
       <div v-if="uploading" class="uploading"><el-icon class="is-loading"><Refresh /></el-icon>正在上传…</div>
       <el-alert type="info" :closable="false" show-icon class="tip-alert"
-        title="单文件不超过 20MB、单表不超过 100 万行；上传后系统自动识别表头和类型，请确认后导入" />
+        title="单文件不超过 50MB、单表不超过 100 万行；上传后系统自动识别表头和类型，请确认后导入" />
     </el-dialog>
 
     <DatasetImportWizard v-if="wizardId" :id="wizardId" @close="wizardId = null" @done="onImported" />
@@ -158,7 +158,7 @@ function check(f) {
   if (!targetKb.value) { ElMessage.error('请先选择知识库'); return false }
   const ext = f.name.split('.').pop().toLowerCase()
   if (!['xlsx', 'xls', 'csv'].includes(ext)) { ElMessage.error('仅支持 xlsx / xls / csv'); return false }
-  if (f.size > 20 * 1024 * 1024) { ElMessage.error('文件不能超过 20MB'); return false }
+  if (f.size > 50 * 1024 * 1024) { ElMessage.error('文件不能超过 50MB'); return false }
   return true
 }
 

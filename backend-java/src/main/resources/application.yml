@@ -5,7 +5,7 @@ spring:
     username: ${DB_USER:kb}
     password: ${DB_PASS:kb123}
   mvc: { async: { request-timeout: 180000 } }
-  servlet: { multipart: { max-file-size: 20MB, max-request-size: 20MB } }
+  servlet: { multipart: { max-file-size: 50MB, max-request-size: 50MB } }
 kb:
   upload-dir: ${UPLOAD_DIR:../uploads}
   rag-url: ${RAG_URL:http://localhost:8000}

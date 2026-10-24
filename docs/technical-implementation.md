@@ -238,8 +238,8 @@ sequenceDiagram
   - `main._INGEST_LOCK`：`INGEST_SERIAL` 默认 true，同一时刻只处理一个文件，防止多个 OCR 同时进行导致内存叠加；
   - `vectorstore._INGEST_LOCK`：向量化写入排队。
 - **上传限制**：
-  - Spring `max-file-size` 和 `max-request-size` 都是 20MB（`application.yml`）；超限由 `GlobalExceptionHandler` 返回 413 和中文提示；
-  - nginx `client_max_body_size 50m`。
+  - Spring `max-file-size` 和 `max-request-size` 都是 50MB（`application.yml`）；超限由 `GlobalExceptionHandler` 返回 413 和中文提示；
+  - nginx `client_max_body_size 60m`。
 
 ### 3.8 去重、删除与重建
 

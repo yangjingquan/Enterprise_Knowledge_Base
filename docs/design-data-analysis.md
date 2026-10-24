@@ -6,7 +6,7 @@
 
 现有链路（已读代码确认）：
 
-- **上传**：`DocumentController.upload`（`/api/documents/upload`，需 `canEdit(kbId)`，20MB 限制）→ 存到 `UPLOAD_DIR`（UUID 文件名）→ 写 `document` 表 → `IngestService` 异步调用 Python `/ingest`。
+- **上传**：`DocumentController.upload`（`/api/documents/upload`，需 `canEdit(kbId)`，50MB 限制）→ 存到 `UPLOAD_DIR`（UUID 文件名）→ 写 `document` 表 → `IngestService` 异步调用 Python `/ingest`。
 - **解析**：`document_loader._load_xlsx` 用 openpyxl 把表格转成 Markdown 文本，按段切分，向量化写入 Chroma。**Excel 只被当文本，不能做统计。**
 - **问答**：`QaController.ask/ask/stream` 计算 `kb_ids`（`PermissionService.readableKbIds`）→ Python `rag.answer_stream`（改写 → 混合检索 + rerank → DeepSeek）→ SSE 事件 `rewrite/sources/delta/done`，Java 转发并写 `qa_history`。
 - **权限**：知识库 `visibility=public/private` + `kb_member.role=viewer/editor`，admin 全权。
@@ -81,7 +81,7 @@ flowchart LR
    - 其余为 `VARCHAR`。无法解析的单元格置 NULL，并统计"异常值数量"给用户看。
    - 过滤合计行：末尾"合计/总计/小计"行默认剔除（避免重复求和），预览中提示。
 7. **列画像**：每列记录非空数、去重数、最小/最大值（日期、数字）、Top 10 取值（低基数文本列，如渠道、地区）。供 LLM 理解，也用于把"抖音"映射到实际取值"抖音直播"。
-8. **限制**（可配）：单文件 ≤20MB（与现有一致），单表 ≤100 万行、≤200 列，每个知识库 ≤50 个数据集。导入串行执行（沿用 `INGEST_SERIAL`），流式读取，峰值内存控制在约 150MB。
+8. **限制**（可配）：单文件 ≤50MB，单表 ≤100 万行、≤200 列，每个知识库 ≤50 个数据集。导入串行执行（沿用 `INGEST_SERIAL`），流式读取，峰值内存控制在约 150MB。
 
 **状态**：`pending → parsing → awaiting_confirm → importing → ready / failed`，失败原因写入 `error_msg`。解析阶段只生成"导入方案"（块、表头、类型、是否逆透视），用户在预览中确认后才真正写入 DuckDB。
 
@@ -336,7 +336,7 @@ ALTER TABLE qa_history ADD COLUMN mode VARCHAR(10) NULL, ADD COLUMN analysis JSO
 
 1. **入口**：独立的"数据集"菜单；数据集文件**不**同时进入文档问答。sheet 内的备注文字作为数据集口径说明给大模型用，也不进文档问答。
 2. **.xls**：直接支持，新增 `xlrd` 依赖。
-3. **规模**：单文件 20MB、单表 100 万行；暂不支持按月追加，更新数据需重新上传。
+3. **规模**：单文件 50MB、单表 100 万行；暂不支持按月追加，更新数据需重新上传。
 4. **外发数据**：允许把 3 行样例和最多 50 行结果发给 DeepSeek；目前没有敏感数据（`send_samples` 开关保留，默认开启）。
 5. **内存**：同意 `backend-python` 从 768m 调到 1g。
 6. **权限**：本期不做行级/列级权限，沿用知识库权限。

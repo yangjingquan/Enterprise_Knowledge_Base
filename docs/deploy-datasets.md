@@ -13,7 +13,7 @@
 | 前端 | 新增依赖 `echarts`（npmmirror）。图表 chunk 异步加载，首屏不变 |
 | MySQL（ai_kb） | **自动迁移**：Java 启动时由 `SchemaMigration` 幂等执行，不需要手工跑 SQL。新表 `dataset`、`dataset_block`、`dataset_table`、`dataset_column`；`qa_history` 新列 `mode VARCHAR(10)`、`analysis JSON`。专用账号需要对 ai_kb 有 CREATE / ALTER 权限（之前的迁移已经用过，应该已具备） |
 | 上传目录 | 数据集原文件保存在现有 `ai-kb-uploads` 卷的 `datasets/` 子目录 |
-| nginx | 不用改（`client_max_body_size 50m` 大于 20MB 上传上限） |
+| nginx | `client_max_body_size 60m`（大于 50MB 上传上限，留 multipart 余量） |
 
 ## 2. 上线步骤
 

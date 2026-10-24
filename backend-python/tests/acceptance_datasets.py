@@ -89,10 +89,10 @@ def main():
     with open(big, "w") as f:
         f.write("a,b\n")
         line = "x" * 1000 + ",1\n"
-        while f.tell() < 21 * 1024 * 1024:
+        while f.tell() < 51 * 1024 * 1024:
             f.write(line)
     r = upload(admin, big)
-    check("超过 20MB 被拒（413 + 中文提示）", r.status_code == 413 and "20MB" in r.text, (r.status_code, r.text[:100]))
+    check("超过 50MB 被拒（413 + 中文提示）", r.status_code == 413 and "50MB" in r.text, (r.status_code, r.text[:100]))
 
     d, _ = full_import(admin, write_csv(tmp / "header-only.csv", [["日期", "金额"]]))
     created.append(d["id"])
