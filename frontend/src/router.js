@@ -38,6 +38,6 @@ router.beforeEach(to => {
 })
 
 // 浏览器标签页标题
-router.afterEach(to => { document.title = (to.meta.title ? to.meta.title + ' · ' : '') + '星辰智造 · 企业AI知识库' })
+router.afterEach(to => { document.title = (to.meta.title ? to.meta.title + ' · ' : '') + '企业AI知识库' })
 
 export default router

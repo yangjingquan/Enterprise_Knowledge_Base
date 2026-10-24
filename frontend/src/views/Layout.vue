@@ -10,7 +10,7 @@
       <div class="aside drawer-aside">
         <div class="logo" @click="go('/chat')">
           <div class="mark"><el-icon><MagicStick /></el-icon></div>
-          <div class="brand"><b>企业AI知识库</b><span>星辰智造 · RAG</span></div>
+          <div class="brand"><b>企业AI知识库</b><span>RAG</span></div>
         </div>
         <el-scrollbar>
           <el-menu :default-active="$route.path" class="menu" @select="go">
@@ -33,7 +33,7 @@
     <el-aside v-if="!isPhone" :width="collapsed ? '68px' : '228px'" class="aside">
       <div class="logo" @click="$router.push('/chat')">
         <div class="mark"><el-icon><MagicStick /></el-icon></div>
-        <transition name="fade"><div v-if="!collapsed" class="brand"><b>企业AI知识库</b><span>星辰智造 · RAG</span></div></transition>
+        <transition name="fade"><div v-if="!collapsed" class="brand"><b>企业AI知识库</b><span>RAG</span></div></transition>
       </div>
       <el-scrollbar>
         <el-menu :default-active="$route.path" router :collapse="collapsed" :collapse-transition="false" class="menu">

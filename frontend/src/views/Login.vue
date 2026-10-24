@@ -4,7 +4,7 @@
     <section class="hero">
       <div class="glow g1" /><div class="glow g2" />
       <div class="hero-inner">
-        <div class="logo"><div class="mark"><el-icon><MagicStick /></el-icon></div><span>星辰智造 · 企业AI知识库</span></div>
+        <div class="logo"><div class="mark"><el-icon><MagicStick /></el-icon></div><span>企业AI知识库</span></div>
         <h1>让企业知识<br /><em>一问即达</em></h1>
         <p class="lead">基于 RAG 检索增强生成，制度、手册、表格、PPT、扫描件统一入库，回答附带原文出处，可追溯、可验证。</p>
         <ul class="features">
@@ -13,7 +13,7 @@
           <li><el-icon><Lock /></el-icon><div><b>知识库权限隔离</b><span>按部门授权，查看 / 编辑分级管理</span></div></li>
         </ul>
       </div>
-      <div class="copyright">© 2026 星辰智造 · Powered by DeepSeek & 阿里云百炼</div>
+      <div class="copyright">© 2026 · Powered by DeepSeek & 阿里云百炼</div>
     </section>
 
     <section class="form-side">
